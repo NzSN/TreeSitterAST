@@ -1,8 +1,12 @@
 module Main where
 
-import qualified MyLib (someFunc)
+import System.Environment (getArgs)
+import Control.Monad.Trans.Maybe
+
+import qualified MyLib (decode_node_types)
 
 main :: IO ()
 main = do
-  putStrLn "Hello, Haskell!"
-  MyLib.someFunc
+  (path:_) <- getArgs
+
+  content <- runMaybeT $ MyLib.decode_node_types path

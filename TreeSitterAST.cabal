@@ -69,7 +69,9 @@ library
 
     -- Other library packages from which modules are imported.
     build-depends:    base ^>=4.20.0.0,
-                      aeson
+                      aeson,
+                      bytestring >= 0.12.2.0,
+                      transformers >= 0.6.1.2
 
     -- Directories containing source files.
     hs-source-dirs:   src
@@ -93,7 +95,8 @@ executable TreeSitterAST
     -- Other library packages from which modules are imported.
     build-depends:
         base ^>=4.20.0.0,
-        TreeSitterAST
+        TreeSitterAST,
+        transformers >= 0.6.1.2
 
     -- Directories containing source files.
     hs-source-dirs:   app
