@@ -10,3 +10,5 @@ main = do
   (path:_) <- getArgs
 
   content <- runMaybeT $ MyLib.decode_node_types path
+
+  putStrLn $ show content

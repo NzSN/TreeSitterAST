@@ -1,4 +1,5 @@
 {-# LANGUAGE DeriveAnyClass, GeneralizedNewtypeDeriving, DerivingStrategies #-}
+{-# LANGUAGE DeriveGeneric #-}
 
 module MyLib (
   decode_node_types,
@@ -13,20 +14,21 @@ import Data.Maybe
 import qualified Data.ByteString.Lazy.Char8 as BSL_Char8
 import qualified Data.Aeson as Aeson
 import Data.Aeson.Types
+import Data.Aeson.Key
 
 
 data NodeDesc = ND {
   node_type :: String,
-  named     :: Bool }
+  named     :: Bool } deriving (Show)
 
 data ChildrenNodes = NC {
   multipled :: Bool,
   required  :: Bool,
-  types     :: [NodeDesc] } | NC_Empty
+  types     :: [NodeDesc] } | NC_Empty deriving (Show)
 
 data NodeTypes = NT {
   info      :: NodeDesc,
-  children  :: ChildrenNodes }
+  children  :: ChildrenNodes } deriving (Show)
 
 
 decode_node_types :: String -> MaybeT IO [NodeTypes]
@@ -45,11 +47,12 @@ decode_node_types path = do
     parseAsNodeTypes (x:xs) =
       let current =
             flip parseMaybe x $ \obj -> do
-                node_type <- obj .: ("type" :: Key)
-                named     <- obj .: "named"
+                node_type <- obj .: (fromString "type")
+                named     <- obj .: (fromString "named")
 
-                Just $ NT (ND node_type True) NC_Empty
+                return $ NT (ND node_type named) NC_Empty
+
           rest = parseAsNodeTypes xs
       in if (isNothing current) || (isNothing rest)
          then Nothing
-         else [fromJust current] ++ (fromJust rest)
+         else return $ [fromJust current] ++ (fromJust rest)
