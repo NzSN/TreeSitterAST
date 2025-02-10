@@ -3,6 +3,7 @@ module TreeSitterNodes
  ChildInfo(..),
  Field(..),
  Node(..),
+ parse_node_types,
 ) where
 
 import Data.Aeson as Aeson
@@ -24,6 +25,7 @@ data ChildInfo =
   ChildInfo { required  :: Bool,
               multipled :: Bool,
               types     :: [BasicInfo] }
+  | NoChild
   deriving (Show)
 
 data Field =
@@ -57,7 +59,7 @@ parse_node_types path = do
                 node_type <- obj .: (fromString "type")
                 named     <- obj .: (fromString "named")
 
-                return $ NT (ND node_type named) NC_Empty
+                return $ Leaf (BasicInfo node_type named)
 
           rest = parseAsNodeTypes xs
       in if (isNothing current) || (isNothing rest)
