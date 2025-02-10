@@ -30,7 +30,6 @@ data NodeTypes = NT {
   info      :: NodeDesc,
   children  :: ChildrenNodes } deriving (Show)
 
-
 decode_node_types :: String -> MaybeT IO [NodeTypes]
 decode_node_types path = do
   content <- lift $ readFile path
