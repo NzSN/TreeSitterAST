@@ -62,8 +62,7 @@ library
     exposed-modules: TreeSitterNodes,
 
     -- Modules included in this library but not exported.
-    other-modules: Backends,
-                   CPP_Backend
+    -- other-modules:
 
     -- LANGUAGE extensions used by modules in this package.
     -- other-extensions:
@@ -131,4 +130,5 @@ test-suite TreeSitterAST-test
     -- Test dependencies.
     build-depends:
         base ^>=4.20.0.0,
-        TreeSitterAST
+        TreeSitterAST,
+        HUnit >= 1.6.2.0,
