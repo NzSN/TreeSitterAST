@@ -132,3 +132,4 @@ test-suite TreeSitterAST-test
         base ^>=4.20.0.0,
         TreeSitterAST,
         HUnit >= 1.6.2.0,
+        QuickCheck >= 2.15.0.1,
