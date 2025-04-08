@@ -1,6 +1,6 @@
 {-# LANGUAGE DeriveAnyClass #-}
 
-module CPP_backend where
+module CPP_Backend where
 
 import qualified Data.Aeson as Aeson
 import qualified Backends

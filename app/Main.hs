@@ -3,12 +3,12 @@ module Main where
 import System.Environment (getArgs)
 import Control.Monad.Trans.Maybe
 
-import qualified TreeSitterNodes as TSN (parse_node_types)
+import qualified TreeSitterNodes as TS
 
 main :: IO ()
 main = do
   (path:_) <- getArgs
 
-  content <- runMaybeT $ TSN.parse_node_types path
+  content <- runMaybeT $ TS.parse_node_types path
 
   putStrLn $ show content

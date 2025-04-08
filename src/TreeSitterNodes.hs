@@ -1,14 +1,17 @@
+{-# LANGUAGE OverloadedStrings #-}
+
 module TreeSitterNodes
-(BasicInfo(..),
- ChildInfo(..),
- Field(..),
+(NodeInfo(..),
+ Children(..),
  Node(..),
  parse_node_types,
 ) where
 
+import GHC.Generics
+
+import Data.Map
 import Data.Aeson as Aeson
 import Data.Aeson.Types
-import Data.Aeson.Key
 import Data.Maybe
 
 import qualified Data.ByteString.Lazy.Char8 as BSL_Char8
@@ -16,29 +19,35 @@ import qualified Data.ByteString.Lazy.Char8 as BSL_Char8
 import Control.Monad.Trans.Class
 import Control.Monad.Trans.Maybe
 
-data BasicInfo =
-  BasicInfo { node_type :: String,
+data NodeInfo =
+  NodeInfo { node_type :: String,
               named     :: Bool }
-  deriving (Show)
+  deriving (Show, Generic)
+instance ToJSON NodeInfo
+instance FromJSON NodeInfo where
+  parseJSON (Object v) =
+    NodeInfo
+    <$> v .: "type"
+    <*> v .: "named"
+  parseJSON invalid = prependFailure
+    "Parsing NodeInfo failed"
+    (typeMismatch "Object" invalid)
 
-data ChildInfo =
-  ChildInfo { required  :: Bool,
-              multipled :: Bool,
-              types     :: [BasicInfo] }
-  | NoChild
-  deriving (Show)
-
-data Field =
-  Field { field_name :: String,
-          field_info :: ChildInfo }
-  deriving (Show)
-
+data Children =
+  Children { required  :: Bool,
+              multiple  :: Bool,
+              types     :: [NodeInfo] }
+  deriving (Show, Generic)
+instance ToJSON Children
+instance FromJSON Children
 data Node =
-  Leaf { info :: BasicInfo } |
-  Internal { info :: BasicInfo,
-             fields :: [Field],
-             children :: ChildInfo }
-  deriving (Show)
+  Leaf { info :: NodeInfo } |
+  Interior { info :: NodeInfo,
+             fields :: Map String Children,
+             children :: Maybe Children }
+  deriving (Show, Generic)
+instance ToJSON Node
+instance FromJSON Node
 
 parse_node_types :: String -> MaybeT IO [Node]
 parse_node_types path = do
@@ -48,19 +57,25 @@ parse_node_types path = do
 
   case json of
     Nothing  -> MaybeT $ return Nothing
-    Just obj -> return $ fromJust $ parseAsNodeTypes obj
-
+    Just obj -> case parseAsNodeTypes obj of
+      Nothing -> MaybeT $ return Nothing
+      Just ns -> return ns
   where
     parseAsNodeTypes :: [Aeson.Object] -> Maybe [Node]
     parseAsNodeTypes [] = Just []
     parseAsNodeTypes (x:xs) =
       let current =
             flip parseMaybe x $ \obj -> do
-                node_type <- obj .: (fromString "type")
-                named     <- obj .: (fromString "named")
+                node_type <- obj .: "type"
+                named     <- obj .: "named"
+                children  <- obj .:? "children"
+                fields    <- obj .:? "fields"
 
-                return $ Leaf (BasicInfo node_type named)
-
+                case (children,fields) of
+                  (Nothing,Nothing)  -> return $ Leaf (NodeInfo node_type named)
+                  (Just cs,Just fs)  -> return $ Interior (NodeInfo node_type named) fs cs
+                  (Just cs, Nothing) -> return $ Interior (NodeInfo node_type named) empty cs
+                  (Nothing, Just fs) -> return $ Interior (NodeInfo node_type named) fs Nothing
           rest = parseAsNodeTypes xs
       in if (isNothing current) || (isNothing rest)
          then Nothing
