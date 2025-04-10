@@ -14,6 +14,3 @@ cradle:
 
     - path: "test"
       component: "TreeSitterAST:test:TreeSitterAST-test"
-
-    - path: "test/Template"
-      component: "TreeSitterAST:test:TreeSitterAST-test"
