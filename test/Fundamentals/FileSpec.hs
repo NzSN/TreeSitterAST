@@ -11,7 +11,7 @@ import Template.Template (TArray(TArray), inst)
 
 buffer_io_method :: [String] -> IO_Method [String]
 buffer_io_method initial = IO_M
-  (\_ -> return "")
+  (\_ -> return $ foldl (\x y -> x ++ y) "" initial)
   (\_ content -> return $ initial ++ [content])
 
 file_spec :: TestTree
