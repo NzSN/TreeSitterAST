@@ -1,6 +1,16 @@
 module Main (main) where
 
-import Test.HUnit
+import Test.Tasty
+
+import Template.TypeScriptTemplateSpec
+import Fundamentals.FileSpec (file_spec)
 
 main :: IO ()
-main = putStrLn "Test suite not yet implemented."
+main = defaultMain tests
+
+tests :: TestTree
+tests = testGroup "Tests" [unitTests]
+
+unitTests :: TestTree
+unitTests = testGroup "Unit tests"
+  [template_testcase, file_spec]
