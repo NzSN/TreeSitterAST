@@ -3,8 +3,17 @@ cradle:
     - path: "src"
       component: "lib:TreeSitterAST"
 
+    - path: "src/Template"
+      component: "lib:TreeSitterAST"
+
+    - path: "src/BackendDescription"
+      component: "lib:TreeSitterAST"
+
     - path: "app/Main.hs"
       component: "TreeSitterAST:exe:TreeSitterAST"
 
     - path: "test"
+      component: "TreeSitterAST:test:TreeSitterAST-test"
+
+    - path: "test/Template"
       component: "TreeSitterAST:test:TreeSitterAST-test"

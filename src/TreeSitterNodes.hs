@@ -72,8 +72,8 @@ parse_node_types path = do
                 fields    <- obj .:? "fields"
 
                 case (children,fields) of
-                  (Nothing, Nothing)  -> return $ Leaf (NodeInfo node_type named)
-                  (Just cs, Just fs)  -> return $ Interior (NodeInfo node_type named) fs cs
+                  (Nothing, Nothing) -> return $ Leaf (NodeInfo node_type named)
+                  (Just cs, Just fs) -> return $ Interior (NodeInfo node_type named) fs cs
                   (Just cs, Nothing) -> return $ Interior (NodeInfo node_type named) empty cs
                   (Nothing, Just fs) -> return $ Interior (NodeInfo node_type named) fs Nothing
           rest = parseAsNodeTypes xs

@@ -60,9 +60,12 @@ library
 
     -- Modules exported by the library.
     exposed-modules: TreeSitterNodes,
+                     Template.Template,
+                     Template.TypeScriptTemplate,
+                     Fundamentals.File,
 
     -- Modules included in this library but not exported.
-    -- other-modules:
+    -- other-modules: Template.TypeScriptTemplate
 
     -- LANGUAGE extensions used by modules in this package.
     -- other-extensions:
@@ -73,9 +76,13 @@ library
                       bytestring >= 0.12.2.0,
                       transformers >= 0.6.1.2,
                       containers,
+                      formatting >= 7.2.0,
+                      text >= 2.1.2,
 
     -- Directories containing source files.
-    hs-source-dirs:   src
+    hs-source-dirs:   src,
+                      src/Template,
+                      src/BackendDescription,
 
     -- Base language which the package is written in.
     default-language: GHC2024
@@ -113,7 +120,8 @@ test-suite TreeSitterAST-test
     default-language: GHC2024
 
     -- Modules included in this executable, other than Main.
-    -- other-modules:
+    other-modules: Template.TypeScriptTemplateSpec,
+                   Fundamentals.FileSpec,
 
     -- LANGUAGE extensions used by modules in this package.
     -- other-extensions:
@@ -122,7 +130,7 @@ test-suite TreeSitterAST-test
     type:             exitcode-stdio-1.0
 
     -- Directories containing source files.
-    hs-source-dirs:   test
+    hs-source-dirs:   test,
 
     -- The entrypoint to the test suite.
     main-is:          Main.hs
@@ -133,3 +141,6 @@ test-suite TreeSitterAST-test
         TreeSitterAST,
         HUnit >= 1.6.2.0,
         QuickCheck >= 2.15.0.1,
+        tasty >= 1.5.3,
+        tasty-hunit >= 0.10.2,
+        text >= 2.1.2,
