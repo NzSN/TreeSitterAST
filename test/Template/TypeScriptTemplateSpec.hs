@@ -1,12 +1,23 @@
 {-# LANGUAGE OverloadedStrings #-}
 module Template.TypeScriptTemplateSpec (template_testcase) where
 
-import Test.Tasty (TestTree)
+import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit
 
 import Template.Template
 import Template.TypeScriptTemplate
 
 template_testcase :: TestTree
-template_testcase = testCase "Introduction" $ do
-  (inst import_statement $ TArray ["1","2"]) "Path" @?= "import { 1,2 } from 'Path';"
+template_testcase = testGroup "Template Tests"
+  [testCase "Introduction" $ do
+      (inst import_statement $ TArray ["1","2"]) "Path" @?= "import { 1,2 } from 'Path';",
+   testCase "Introduction 2" $ do
+      (inst class_declare "CC" (Just "Base")
+        -- Properties
+        (Just $ TArray [
+
+                       ])
+        -- Methods
+        (Just $ TArray ["3", "4"])) @?=
+        "class CC implements Base { 1 2 3 4 }"
+  ]

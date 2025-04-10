@@ -1,3 +1,4 @@
+{-# LANGUAGE TemplateHaskell #-}
 module Template.Template (
   Template(..),
   TArray(..),
@@ -6,8 +7,7 @@ module Template.Template (
 import Formatting (Format, formatToString)
 import Formatting.Buildable (Buildable(..))
 
-data Template args = T { eval :: Format String args }
-
+data Template  args = T { eval :: Format String args }
 inst :: Template a -> a
 inst t = formatToString $ eval t
 
