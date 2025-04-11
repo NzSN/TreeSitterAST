@@ -10,6 +10,7 @@ module Fundamentals.File (
 
 import System.IO (hGetContents, hPutStr, withFile, IOMode(..))
 
+
 data IO_Method a = IO_M {
   io_read  :: String -> IO String,
   io_write :: String -> String -> IO a
