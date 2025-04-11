@@ -56,7 +56,8 @@ method_declare :: Template (-- Method Ident
 method_declare = T $
   text % "(" % build % ")" % (optioned (": " % text)) % " { " % build % " }"
 
-prop_declare ::
+prop_declare :: Template (Text -> Text -> String)
+prop_declare = T $ text % " : " % text
 
 class_declare :: Template (-- Class Ident
                            Text ->
