@@ -35,15 +35,16 @@ instance FromJSON NodeInfo where
 
 data Children =
   Children { required  :: Bool,
-              multiple  :: Bool,
-              types     :: [NodeInfo] }
+             multiple :: Bool,
+             types    :: [NodeInfo] }
   deriving (Show, Generic)
 instance ToJSON Children
 instance FromJSON Children
 data Node =
   Leaf { info :: NodeInfo } |
-  Interior { info :: NodeInfo,
-             fields :: Map String Children,
+  Interior { info     :: NodeInfo,
+             fields   :: Maybe (Map String Children),
+             subtypes :: Maybe [NodeInfo],
              children :: Maybe Children }
   deriving (Show, Generic)
 instance ToJSON Node
@@ -70,12 +71,17 @@ parse_node_types path = do
                 named     <- obj .: "named"
                 children  <- obj .:? "children"
                 fields    <- obj .:? "fields"
+                subtypes  <- obj .:? "subtypes"
 
-                case (children,fields) of
-                  (Nothing, Nothing) -> return $ Leaf (NodeInfo node_type named)
-                  (Just cs, Just fs) -> return $ Interior (NodeInfo node_type named) fs cs
-                  (Just cs, Nothing) -> return $ Interior (NodeInfo node_type named) empty cs
-                  (Nothing, Just fs) -> return $ Interior (NodeInfo node_type named) fs Nothing
+                case (children,fields, subtypes) of
+                  (Nothing, Nothing, Nothing) -> return $ Leaf (NodeInfo node_type named)
+                  (Nothing, Nothing, Just st) -> return $ Interior (NodeInfo node_type named) Nothing st Nothing
+                  (Just cs, Just fs, Just st) -> return $ Interior (NodeInfo node_type named) fs st cs
+                  (Just cs, Just fs, Nothing) -> return $ Interior (NodeInfo node_type named) fs Nothing cs
+                  (Just cs, Nothing, Just st) -> return $ Interior (NodeInfo node_type named) Nothing st cs
+                  (Just cs, Nothing, Nothing) -> return $ Interior (NodeInfo node_type named) Nothing Nothing cs
+                  (Nothing, Just fs, Just st) -> return $ Interior (NodeInfo node_type named) fs st Nothing
+                  (Nothing, Just fs, Nothing) -> return $ Interior (NodeInfo node_type named) fs Nothing Nothing
           rest = parseAsNodeTypes xs
       in if (isNothing current) || (isNothing rest)
          then Nothing
