@@ -60,9 +60,12 @@ library
 
     -- Modules exported by the library.
     exposed-modules: TreeSitterNodes,
+                     Utility,
                      Template.Template,
                      Template.TypeScriptTemplate,
                      Fundamentals.File,
+                     BackendDescription.BackendDescription,
+                     BackendDescription.NodeDescription,
 
     -- Modules included in this library but not exported.
     -- other-modules: Template.TypeScriptTemplate
@@ -81,9 +84,7 @@ library
                       template-haskell,
 
     -- Directories containing source files.
-    hs-source-dirs:   src,
-                      src/Template,
-                      src/BackendDescription,
+    hs-source-dirs:   src
 
     -- Base language which the package is written in.
     default-language: GHC2024

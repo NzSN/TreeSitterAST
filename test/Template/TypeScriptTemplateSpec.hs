@@ -14,9 +14,7 @@ template_testcase = testGroup "Template Tests"
    testCase "Introduction 2" $ do
       (inst class_declare "CC" (Just "Base")
         -- Properties
-        (Just $ TArray [
-
-                       ])
+        (Just $ TArray ["1", "2"])
         -- Methods
         (Just $ TArray ["3", "4"])) @?=
         "class CC implements Base { 1 2 3 4 }"

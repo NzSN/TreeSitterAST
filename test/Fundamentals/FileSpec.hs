@@ -7,6 +7,7 @@ import Test.Tasty.HUnit
 import Template.TypeScriptTemplate (import_statement)
 import Fundamentals.File (File(..), (<<-), IO_Method(..))
 import Template.Template (TArray(TArray), inst)
+import Data.Text.Lazy (unpack)
 
 
 buffer_io_method :: [String] -> IO_Method [String]
@@ -18,5 +19,5 @@ file_spec :: TestTree
 file_spec = testCase "File Write" $
   let f = File "adf" (buffer_io_method []) []
   in (return f)
-        <<- (inst import_statement (TArray ["1", "2"]) "Path")
+        <<- (unpack $ inst import_statement (TArray ["1", "2"]) "Path")
      >>= \f' -> (show $ buffer f') @?= "[\"import { 1,2 } from 'Path';\"]"
