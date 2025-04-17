@@ -12,8 +12,52 @@ import Utility (upper_the_first_char, validate_field_ident)
 
 descript :: [TN.Node] -> String
 descript [] = ""
-descript nodes = foldl' (\s n -> s ++ " " ++ node_proc n) "" nodes
+descript nodes =
+  let node_desc = foldl' (\s n -> s ++ " " ++ node_proc n) "" nodes
+  in prologue ++ node_desc
   where
+    prologue :: String
+    prologue =
+      (unpack $
+        TT.inst TTS.import_statement
+          (TT.TArray ["strict as assert"]) "assert")
+      ++
+      (unpack $
+        TT.inst TTS.import_statement
+          (TT.TArray ["Node"]) "web-tree-sitter")
+      ++
+      (unpack $
+        TT.inst TTS.import_statement
+          (TT.TArray ["Searcher"])
+          "./ast_helper")
+      ++
+      "\n\
+      \export class TS_Node { \n\
+        \private node_: Node; \n\
+        \private start_index_: number; \n\
+        \private end_index_: number;\n\
+        \\n\
+        \constructor(node: Node) {\n\
+        \    this.node_ = node;\n\
+        \    this.start_index_ = node.startIndex;\n\
+        \    this.end_index_ = node.endIndex;\n\
+        \}\n\
+        \\n\
+        \public getText() {\n\
+        \    return this.node_.text;\n\
+        \}\n\
+        \public get start_index(): number {\n\
+        \    return this.start_index_;\n\
+        \}\n\
+        \public get end_index(): number {\n\
+        \    return this.end_index_;\n\
+        \}\n\
+        \\n\
+        \public get type(): string {\n\
+        \    return this.node_.type;\n\
+        \}\n\
+      \}"
+
     node_proc :: TN.Node -> String
     node_proc node@(TN.Leaf n_info) =
       if TN.named n_info
@@ -22,16 +66,18 @@ descript nodes = foldl' (\s n -> s ++ " " ++ node_proc n) "" nodes
     node_proc node = unpack $ interior_node node
 
     leaf_node :: TN.Node -> Text
-    leaf_node (TN.Leaf n_info) = (TT.inst TTS.class_declare)
-      (pack $ upper_the_first_char $ TN.node_type n_info)     -- Class Identifier
-      (Just "TS_Node")                                        -- Base Class
-      (Just (TT.TArray $ prop_declarations (TN.Leaf n_info))) -- Properties
-      (Just (TT.TArray $ constructor (TN.Leaf n_info) : []))  -- Constructor
+    leaf_node (TN.Leaf n_info) = TT.inst TTS.export_qualifier $
+      (TT.inst TTS.class_declare)
+        (pack $ upper_the_first_char $ TN.node_type n_info)     -- Class Identifier
+        (Just "TS_Node")                                        -- Base Class
+        (Just (TT.TArray $ prop_declarations (TN.Leaf n_info))) -- Properties
+        (Just (TT.TArray $ constructor (TN.Leaf n_info) : []))  -- Constructor
     leaf_node _ = undefined
 
     interior_node :: TN.Node -> Text
     -- Leaf node is impossible here
     interior_node node@(TN.Interior n_info _ Nothing _) =
+      TT.inst TTS.export_qualifier $
       TT.inst TTS.class_declare
         (pack $ upper_the_first_char $ TN.node_type n_info)
         (Just "TS_Node")
@@ -43,6 +89,7 @@ descript nodes = foldl' (\s n -> s ++ " " ++ node_proc n) "" nodes
               []))
 
     interior_node node@(TN.Interior n_info _ (Just _) _) =
+      TT.inst TTS.export_qualifier $
       TT.inst TTS.class_declare
         (pack $ upper_the_first_char $ TN.node_type n_info)
         (Just "TS_Node")

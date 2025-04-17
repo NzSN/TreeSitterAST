@@ -24,7 +24,7 @@ module Template.TypeScriptTemplate
 
 import Template.Template (Template(..), TArray(..), inst)
 
-import Formatting ((%+),(%), commaSep, text, optioned, spaced, Format, formatToString)
+import Formatting ((%), commaSep, text, optioned, spaced, formatToString)
 import Formatting.Formatters (build)
 import Data.Text.Lazy (Text, unpack, pack)
 import Utility (upper_the_first_char, validate_field_ident)

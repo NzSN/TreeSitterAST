@@ -60,11 +60,11 @@ library
 
     -- Modules exported by the library.
     exposed-modules: TreeSitterNodes,
-                     Utility,
                      Template.Template,
                      Template.TypeScriptTemplate,
                      Fundamentals.File,
-                     BackendDescription.BackendDescription,
+                     Utility,
+                     BackendDescription.NodeProcessorDescription,
                      BackendDescription.NodeDescription,
 
     -- Modules included in this library but not exported.
