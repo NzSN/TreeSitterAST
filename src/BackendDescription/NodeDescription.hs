@@ -120,7 +120,8 @@ descript nodes = foldl' (\s n -> s ++ " " ++ node_proc n) "" nodes
             field_type (TN.Children _ True ts)  =
               let r = flip (flip foldl' "") ts $
                     \acc n_info -> acc ++ (upper_the_first_char $ TN.node_type n_info) ++ "[] | "
-              in  pack $ r ++ "undefined;"
+                  w = words r
+              in  pack $ (unwords $ take (length w - 1) $ w) ++ " = [];"
 
             field_type (TN.Children _ False ts) =
               let r = flip (flip foldl' "") ts $

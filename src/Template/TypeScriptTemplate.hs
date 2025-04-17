@@ -116,8 +116,7 @@ prop_initialize prop_name = inst
   (T $
    "{\n\
     \ let r = (new Searcher(node, \"" % text % "\")).searching_next(node.walk());\n\
-    \ if (r == null) { throw new Error(\"Fail to initialize\"); }\n\
-    \ this." % text % " = new " % text % "(r); \n\
+    \ if (r != null) { this." % text % " = new " % text % "(r); }\n\
     \}")
   prop_name prop_name (pack $ upper_the_first_char $ unpack prop_name)
 
