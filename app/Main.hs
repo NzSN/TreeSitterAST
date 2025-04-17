@@ -4,8 +4,11 @@ import Data.Maybe
 import System.Environment (getArgs)
 import Control.Monad.Trans.Maybe
 
+import System.IO
+
 import qualified TreeSitterNodes as TS
-import BackendDescription.NodeDescription as BN
+import qualified BackendDescription.NodeDescription as BN
+import qualified BackendDescription.NodeProcessorDescription as BP
 
 main :: IO ()
 main = do
@@ -13,5 +16,9 @@ main = do
   content <- runMaybeT $ TS.parse_node_types path
 
   if isNothing content
-    then putStrLn "Fail to parse"
-    else putStrLn $ BN.descript $ fromJust content
+    then putStrLn "Fail to parse node-types.json"
+    else do
+      withFile "node_processor.ts" WriteMode $
+        \h -> hPutStr h $ BP.descript $ fromJust content
+      withFile "node_declare.ts" WriteMode $
+        \h -> hPutStr h $ BN.descript $ fromJust content

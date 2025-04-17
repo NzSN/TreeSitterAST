@@ -1,6 +1,7 @@
 {-# LANGUAGE OverloadedStrings, TemplateHaskell, TemplateHaskellQuotes #-}
 module Template.TypeScriptTemplate
   (import_statement,
+   import_all_statement,
    export_qualifier,
    const_qualifier,
    static_qualifier,
@@ -19,7 +20,10 @@ module Template.TypeScriptTemplate
    prop_initialize,
    prop_initialize_array,
    field_initialize,
-   array_field_initialize
+   array_field_initialize,
+   case_expression,
+   switch_statements,
+   node_processor_proc_template
    ) where
 
 import Template.Template (Template(..), TArray(..), inst)
@@ -31,6 +35,9 @@ import Utility (upper_the_first_char, validate_field_ident)
 
 import_statement :: Template (TArray Text -> Text -> Text)
 import_statement = T $ "import { " % (commaSep build) % " } from '" % text % "';"
+
+import_all_statement :: Template (Text -> Text -> Text)
+import_all_statement = T $ "import * as " % text % " from '" % text % "';"
 
 export_qualifier :: Template (Text -> Text)
 export_qualifier = T $ "export " % text
@@ -79,7 +86,7 @@ method_declare = T $
   text % "(" % build % ")" % (optioned (": " % text)) % " { " % build % " }"
 
 prop_declare :: Template (Text -> Text -> Text)
-prop_declare = T $ text % " : " % text
+prop_declare = T $ text % " : " % text % ";"
 
 const_declare :: Template (TArray Text -> -- Parameters
                            TArray Text -> -- Statements
@@ -165,3 +172,16 @@ array_field_initialize field_name types =
             \}\n")
           x prop_name (pack $ upper_the_first_char $ unpack x))
         ++ (unpack $ field_type_check prop_name xs)
+
+case_expression :: Text -> Text -> Text
+case_expression = inst $ T $ "case \"" % text % "\": " % text
+
+switch_statements :: Text -> TArray Text -> Text
+switch_statements = inst $ T $ "switch (" % text % ") { " % build % " }"
+
+node_processor_proc_template :: Text -> Text
+node_processor_proc_template t =
+  inst (T $ "if (this." % text % " != undefined) { results = this." % text % "(node as " % text % "); } break;")
+        proc_ident proc_ident (pack $ upper_the_first_char $ unpack t)
+  where
+    proc_ident = pack $ (unpack t) ++ "_proc"
