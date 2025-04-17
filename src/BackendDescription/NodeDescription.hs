@@ -11,7 +11,6 @@ import qualified Data.List as List
 import Utility (upper_the_first_char, validate_field_ident)
 
 descript :: [TN.Node] -> String
-descript [] = ""
 descript nodes =
   let node_desc = foldl' (\s n -> s ++ " " ++ node_proc n) "" nodes
   in prologue ++ node_desc
