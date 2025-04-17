@@ -6,7 +6,7 @@ module Template.Template (
 
 import Formatting (Format, format)
 import Formatting.Buildable (Buildable(..))
-import Data.Text.Lazy (Text,unpack)
+import Data.Text.Lazy (Text)
 
 data Template args = T { eval :: Format Text args }
 inst :: Template a -> a
