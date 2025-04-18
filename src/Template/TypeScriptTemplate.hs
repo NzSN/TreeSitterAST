@@ -50,7 +50,7 @@ static_qualifier :: Template (Text -> Text)
 static_qualifier = T $ "static " % text
 
 variable_decl :: Template (Text -> Text -> Text)
-variable_decl = T $ "let " % text % " = \"" % text % "\";"
+variable_decl = T $ "let " % text % " = " % text % ";"
 
 parameter_declare :: Template (Text -> Text -> Text)
 parameter_declare = T $ text % " : " % text
