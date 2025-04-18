@@ -1,4 +1,4 @@
-{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE OverloadedStrings, LambdaCase #-}
 module BackendDescription.NodeProcessorDescription where
 
 import qualified Template.Template as TT
@@ -7,6 +7,7 @@ import qualified TreeSitterNodes as TN
 import Data.Text.Lazy (unpack, pack, Text)
 import Template.TypeScriptTemplate (switch_statements)
 import qualified BackendDescription.NodeDescription as BN
+import qualified BackendDescription.NodeDescriptionHelper as BNH
 
 descript :: [TN.Node] -> String
 descript nodes =
@@ -24,6 +25,14 @@ descript nodes =
       (unpack $ TT.inst TTS.import_statement
         (TT.TArray ["Show"]) "../source")
       ++
+      (unpack $ TT.inst TTS.import_statement
+        (TT.TArray $
+         "TS_Node" :
+          (flip map (named_nodes nodes) $
+            \case { (TN.Leaf (TN.NodeInfo nt _)) -> pack $ BNH.node_type_ident nt;
+                    (TN.Interior (TN.NodeInfo nt _) _ _ _) -> pack $ BNH.node_type_ident nt }))
+        "./node_declare")
+      ++
       ("export type OutputTarget = string;")
 
     -- Assume that all nodes are named
@@ -32,7 +41,8 @@ descript nodes =
 
     build_node_processor :: [TN.Node] -> String
     build_node_processor nodes' =
-      unpack $
+        unpack $
+        TT.inst TTS.export_qualifier $
         (TT.inst TTS.class_declare)
         (pack "NodeProcessor<T extends Show>")
         Nothing
@@ -67,7 +77,7 @@ descript nodes =
                 (Just "[OutputTarget, T][] | null")
                 (TT.TArray [
                     -- Statements
-                    TT.inst TTS.variable_decl "results" "null",
+                    TT.inst TTS.variable_decl "results : [OutputTarget, T][] | null" "null",
                     switch_statements "node.type" case_expressions,
                     "return results"
                            ])
