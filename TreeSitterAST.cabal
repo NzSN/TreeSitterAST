@@ -66,6 +66,8 @@ library
                      Utility,
                      BackendDescription.NodeProcessorDescription,
                      BackendDescription.NodeDescription,
+                     BackendDescription.NodeDescriptionHelper,
+
 
     -- Modules included in this library but not exported.
     -- other-modules: Template.TypeScriptTemplate
