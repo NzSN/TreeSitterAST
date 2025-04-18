@@ -1,5 +1,5 @@
 {-# LANGUAGE OverloadedStrings #-}
-module BackendDescription.NodeDescription (descript) where
+module BackendDescription.NodeDescription (descript, node_type_ident) where
 
 import qualified TreeSitterNodes as TN
 import qualified Template.Template as TT
@@ -8,7 +8,7 @@ import Data.Text.Lazy (pack, Text, unpack)
 import Data.Maybe (isNothing,fromJust)
 import qualified Data.Map as Map
 import qualified Data.List as List
-import Utility (upper_the_first_char, validate_field_ident)
+import BackendDescription.NodeDescriptionHelper
 
 descript :: [TN.Node] -> String
 descript nodes =
@@ -28,7 +28,7 @@ descript nodes =
       (unpack $
         TT.inst TTS.import_statement
           (TT.TArray ["Searcher"])
-          "./ast_helper")
+          "../../parser/ast_helper")
       ++
       "\n\
       \export class TS_Node { \n\
@@ -67,7 +67,7 @@ descript nodes =
     leaf_node :: TN.Node -> Text
     leaf_node (TN.Leaf n_info) = TT.inst TTS.export_qualifier $
       (TT.inst TTS.class_declare)
-        (pack $ upper_the_first_char $ TN.node_type n_info)     -- Class Identifier
+        (pack $ node_type_ident $ TN.node_type n_info)     -- Class Identifier
         (Just "TS_Node")                                        -- Base Class
         (Just (TT.TArray $ prop_declarations (TN.Leaf n_info))) -- Properties
         (Just (TT.TArray $ constructor (TN.Leaf n_info) : []))  -- Constructor
@@ -78,7 +78,7 @@ descript nodes =
     interior_node node@(TN.Interior n_info _ Nothing _) =
       TT.inst TTS.export_qualifier $
       TT.inst TTS.class_declare
-        (pack $ upper_the_first_char $ TN.node_type n_info)
+        (pack $ node_type_ident $ TN.node_type n_info)
         (Just "TS_Node")
         (Just (TT.TArray $ prop_declarations node))
         (Just (TT.TArray $
@@ -90,7 +90,7 @@ descript nodes =
     interior_node node@(TN.Interior n_info _ (Just _) _) =
       TT.inst TTS.export_qualifier $
       TT.inst TTS.class_declare
-        (pack $ upper_the_first_char $ TN.node_type n_info)
+        (pack $ node_type_ident $ TN.node_type n_info)
         (Just "TS_Node")
         (Just (TT.TArray $ prop_declarations node))
         (Just (TT.TArray $
@@ -154,25 +154,30 @@ descript nodes =
       where
         field_prop_declare :: Map.Map String TN.Children -> [Text]
         field_prop_declare field_map =
-          Map.foldrWithKey g [] (flip Map.filter field_map $ \x -> length (TN.types x) > 0 &&
-                                                                   (TN.named $ List.head $ TN.types x) == True)
+          Map.foldrWithKey g [] (flip Map.filter field_map $
+                                 \x -> length (TN.types x) > 0 &&
+                                       (flip (flip foldl' False) (TN.types x) $ \a y -> (TN.named y) || a) == True)
           where
             g :: String -> TN.Children -> [Text] -> [Text]
             g k v a = a ++ [
-              TT.inst TTS.public_qualifier $ TT.inst TTS.parameter_declare (pack $ validate_field_ident k) $ field_type v]
+              TT.inst TTS.public_qualifier $ TT.inst TTS.parameter_declare (pack $ node_name_ident k) $ field_type v]
 
             field_type :: TN.Children -> Text
             -- Which is impossible
             field_type (TN.Children _ True ts)  =
               let r = flip (flip foldl' "") ts $
-                    \acc n_info -> acc ++ (upper_the_first_char $ TN.node_type n_info) ++ "[] | "
+                    \acc n_info -> acc ++ (field_type' n_info) ++ " | "
                   w = words r
-              in  pack $ (unwords $ take (length w - 1) $ w) ++ " = [];"
+              in  pack $ "(" ++ (unwords $ take (length w - 1) $ w) ++ ")[] = [];"
 
             field_type (TN.Children _ False ts) =
               let r = flip (flip foldl' "") ts $
-                    \acc n_info -> acc ++ (upper_the_first_char $ TN.node_type n_info) ++ " | "
+                    \acc n_info -> acc ++ (field_type' n_info) ++ " | "
               in  pack $ r ++ "undefined;"
+
+            field_type' :: TN.NodeInfo -> String
+            field_type' (TN.NodeInfo nt True) = node_type_ident nt
+            field_type' (TN.NodeInfo _  False) = ""
 
         child_prop_declare :: TN.Children -> [Text]
         child_prop_declare (TN.Children _ m ts) =
@@ -183,23 +188,31 @@ descript nodes =
     type_declare is_multipled (TN.NodeInfo nt named) =
       if named
       then TT.inst TTS.public_qualifier $
-            TT.inst TTS.parameter_declare (pack nt)
+            TT.inst TTS.parameter_declare
+            (pack $ node_name_ident nt)
             (pack $
               if is_multipled
-              then upper_the_first_char nt ++ "[] | undefined;"
-              else upper_the_first_char nt ++ " | undefined;")
+              then node_type_ident nt ++ "[] | undefined;"
+              else node_type_ident nt ++ " | undefined;")
         -- Currently, non-named nodes is useless just ignore it
       else ""
 
     prop_initializer_from_node :: TN.NodeInfo -> Text
-    prop_initializer_from_node n_info' =
-      let node_type' = pack $ TN.node_type n_info'
-      in TTS.prop_initialize node_type'
+    prop_initializer_from_node (TN.NodeInfo _ False) = pack $ ""
+    prop_initializer_from_node n_info'@(TN.NodeInfo _ True) =
+      TTS.prop_initialize node_type' prop_ident t_ident
+      where
+        prop_ident = pack $ node_name_ident $ TN.node_type n_info'
+        node_type' = pack $ TN.node_type n_info'
+        t_ident = pack $ node_type_ident (unpack node_type')
 
     array_prop_initializer_from_node :: TN.NodeInfo -> Text
     array_prop_initializer_from_node n_info' =
       let node_type' = pack $ TN.node_type n_info'
-      in TTS.prop_initialize_array node_type'
+      in TTS.prop_initialize_array
+         (pack $ node_name_ident $ unpack node_type')
+         node_type'
+         (pack $ node_type_ident $ unpack node_type')
 
     field_prop_init_stmts :: TN.Node -> [Text]
     field_prop_init_stmts (TN.Leaf _) = []
@@ -209,13 +222,17 @@ descript nodes =
       where
         g :: String -> TN.Children -> [Text] -> [Text]
         g k (TN.Children _ False ts) a =
-          a ++ [TTS.field_initialize (pack k) (map (pack .TN.node_type) (named_only_ts ts))]
+          a ++ [TTS.field_initialize
+                (pack k)
+                (map (pack . TN.node_type) (named_only_ts ts))]
 
-        g k (TN.Children _ True  ts) a = a ++ [TTS.array_field_initialize (pack k) (map (pack . TN.node_type) (named_only_ts ts))]
+        g k (TN.Children _ True  ts) a =
+          a ++ [TTS.array_field_initialize
+                (pack k)
+                (map (pack . TN.node_type) (named_only_ts ts))]
 
         named_only_ts :: [TN.NodeInfo] -> [TN.NodeInfo]
         named_only_ts ts = flip filter ts $ \n_info -> (TN.named n_info == True)
-
 
     prologue_proc :: TN.Node -> [Text]
     prologue_proc node =

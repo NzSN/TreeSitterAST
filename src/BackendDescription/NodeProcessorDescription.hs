@@ -5,8 +5,8 @@ import qualified Template.Template as TT
 import qualified Template.TypeScriptTemplate as TTS
 import qualified TreeSitterNodes as TN
 import Data.Text.Lazy (unpack, pack, Text)
-import Utility (upper_the_first_char)
 import Template.TypeScriptTemplate (switch_statements)
+import qualified BackendDescription.NodeDescription as BN
 
 descript :: [TN.Node] -> String
 descript nodes =
@@ -23,9 +23,6 @@ descript nodes =
     prologue =
       (unpack $ TT.inst TTS.import_statement
         (TT.TArray ["Show"]) "../source")
-      ++
-      (unpack $ TT.inst TTS.import_statement
-        (TT.TArray (map  named_nodes nodes)) ./node_declare")
       ++
       ("export type OutputTarget = string;")
 
@@ -61,7 +58,7 @@ descript nodes =
                 (prop_type_declare t)
         prop_type_declare :: String -> Text
         prop_type_declare t =
-          pack $ "((N: " ++ (upper_the_first_char t) ++ ") => [OutputTarget, T][]) | undefined"
+          pack $ "((N: " ++ (BN.node_type_ident t) ++ ") => [OutputTarget, T][]) | undefined"
 
         trans_method_declare :: [TN.Node] -> Text
         trans_method_declare nodes'' =
@@ -80,6 +77,12 @@ descript nodes =
 
             case_expressions' :: TN.Node -> Text
             case_expressions' (TN.Leaf (TN.NodeInfo t _)) =
-              TTS.case_expression (pack t) (TTS.node_processor_proc_template (pack t))
+              TTS.case_expression
+                (pack t)
+                (TTS.node_processor_proc_template (proc_ident t) (proc_ident t) (pack $ BN.node_type_ident t))
             case_expressions' (TN.Interior (TN.NodeInfo t _) _ _ _) =
-              TTS.case_expression (pack t) (TTS.node_processor_proc_template (pack t))
+              TTS.case_expression
+                (pack t)
+                (TTS.node_processor_proc_template (proc_ident t) (proc_ident t) (pack $ BN.node_type_ident t))
+
+            proc_ident t = pack $ t ++ "_proc"

@@ -32,6 +32,7 @@ import Formatting ((%), commaSep, text, optioned, spaced, formatToString)
 import Formatting.Formatters (build)
 import Data.Text.Lazy (Text, unpack, pack)
 import Utility (upper_the_first_char, validate_field_ident)
+import BackendDescription.NodeDescriptionHelper
 
 import_statement :: Template (TArray Text -> Text -> Text)
 import_statement = T $ "import { " % (commaSep build) % " } from '" % text % "';"
@@ -118,27 +119,24 @@ var_ref = T $ text
 node_type_assertion :: Template (Text -> Text)
 node_type_assertion = T $ "assert(node.type == \'" % text % "\');"
 
-prop_initialize :: Text -> Text
-prop_initialize prop_name = inst
+prop_initialize :: Text -> Text -> Text -> Text
+prop_initialize = inst
   (T $
    "{\n\
     \ let r = (new Searcher(node, \"" % text % "\")).searching_next(node.walk());\n\
     \ if (r != null) { this." % text % " = new " % text % "(r); }\n\
     \}")
-  prop_name prop_name (pack $ upper_the_first_char $ unpack prop_name)
 
-prop_initialize_array :: Text -> Text
-prop_initialize_array prop_name = inst
+prop_initialize_array :: Text -> Text -> Text -> Text
+prop_initialize_array = inst
   (T $
    "this." % text % " = (new Searcher(node, \"" % text % "\")).searching_all(node.walk()).map(((n:Node) => new " % text % "(n)));")
-  prop_name prop_name (pack $ upper_the_first_char $ unpack prop_name)
 
 field_initialize :: Text -> [Text] -> Text
 field_initialize field_name types =
   let s = inst (T $
                 "{\n\
-                \ let n: Node | null = node.childForFieldName(\"" % text % "\"); \n\
-                \ assert(n != null);\n")
+                \ let n: Node | null = node.childForFieldName(\"" % text % "\");\n")
                 field_name
   in pack $ (unpack s) ++ (unpack $ field_type_check field_name types) ++ "\n}\n"
    where
@@ -147,10 +145,12 @@ field_initialize field_name types =
      field_type_check prop_name (x:xs) =
        pack $
         (formatToString (
-            "if (node.type == \"" % text % "\") { \n\
-            \  this." % text % " = new " % text % "(node); \n\
+            "if (n != null && n.type == \"" % text % "\") { \n\
+            \  this." % text % " = new " % text % "(n); \n\
             \}\n")
-          x (pack $ validate_field_ident $ unpack prop_name) (pack $ upper_the_first_char $ unpack x))
+          x
+          (pack $ node_name_ident $ unpack prop_name)
+          (pack $ node_type_ident $ unpack x))
         ++ (unpack $ field_type_check prop_name xs)
 
 array_field_initialize :: Text -> [Text] -> Text
@@ -158,7 +158,8 @@ array_field_initialize field_name types =
   let s = inst (T $
                 "{\n\
                 \ let ns: (Node | null)[] = node.childrenForFieldName(\"" % text % "\");\n\
-                \ ns.forEach((n: Node | null) => {")
+                \ ns.forEach((n: Node | null) => {\n\
+                \ if (n == null) return;\n")
                 field_name
   in pack $ (unpack s) ++ (unpack $ field_type_check field_name types) ++ "}) \n}\n"
    where
@@ -167,10 +168,10 @@ array_field_initialize field_name types =
      field_type_check prop_name (x:xs) =
        pack $
         (formatToString (
-            "if (node.type == \"" % text % "\") { \n\
-            \  this." % text % ".push(new " % text % "(node)); \n\
+            "if (n.type == \"" % text % "\") { \n\
+            \  this." % text % ".push(new " % text % "(n)); \n\
             \}\n")
-          x prop_name (pack $ upper_the_first_char $ unpack x))
+          x (pack $ node_name_ident $ unpack prop_name) (pack $ node_type_ident $ unpack x))
         ++ (unpack $ field_type_check prop_name xs)
 
 case_expression :: Text -> Text -> Text
@@ -179,9 +180,6 @@ case_expression = inst $ T $ "case \"" % text % "\": " % text
 switch_statements :: Text -> TArray Text -> Text
 switch_statements = inst $ T $ "switch (" % text % ") { " % build % " }"
 
-node_processor_proc_template :: Text -> Text
-node_processor_proc_template t =
+node_processor_proc_template :: Text -> Text -> Text -> Text
+node_processor_proc_template =
   inst (T $ "if (this." % text % " != undefined) { results = this." % text % "(node as " % text % "); } break;")
-        proc_ident proc_ident (pack $ upper_the_first_char $ unpack t)
-  where
-    proc_ident = pack $ (unpack t) ++ "_proc"
