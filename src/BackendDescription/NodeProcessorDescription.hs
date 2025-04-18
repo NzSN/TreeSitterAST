@@ -52,8 +52,8 @@ descript nodes =
       where
         basic_prop :: [Text]
         basic_prop = [
-          "prologue? : ((Ns: TS_Node) => [OutputTarget, T][]) | undefined;",
-          "epilogue? : ((Ns: TS_Node) => [OutputTarget, T][]) | undefined;",
+          "prologue? : ((Ns: TS_Node[]) => [OutputTarget, T][]) | undefined;",
+          "epilogue? : ((Ns: TS_Node[]) => [OutputTarget, T][]) | undefined;",
           "post? : ((output_content: T) => T) | undefined;"
           ]
 
