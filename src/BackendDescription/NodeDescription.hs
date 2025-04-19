@@ -7,7 +7,6 @@ import qualified Template.TypeScriptTemplate as TTS
 import Data.Text.Lazy (pack, Text, unpack)
 import Data.Maybe (isNothing,fromJust)
 import qualified Data.Map as Map
-import qualified Data.List as List
 import BackendDescription.NodeDescriptionHelper
 
 descript :: [TN.Node] -> String
@@ -70,7 +69,10 @@ descript nodes =
       (TT.inst TTS.class_declare)
         (pack $ node_type_ident $ TN.node_type n_info)     -- Class Identifier
         (Just "TS_Node")                                        -- Base Class
-        (Just (TT.TArray $ prop_declarations (TN.Leaf n_info))) -- Properties
+        (Just (TT.TArray $
+               [pack $ "public static node_type = \"" ++ (TN.node_type n_info) ++ "\";"]
+               ++
+               prop_declarations (TN.Leaf n_info))) -- Properties
         (Just (TT.TArray $ constructor (TN.Leaf n_info) : []))  -- Constructor
     leaf_node _ = undefined
 
@@ -81,7 +83,10 @@ descript nodes =
       TT.inst TTS.class_declare
         (pack $ node_type_ident $ TN.node_type n_info)
         (Just "TS_Node")
-        (Just (TT.TArray $ prop_declarations node))
+        (Just (TT.TArray $
+               [pack $ "public static node_type = \"" ++ (TN.node_type n_info) ++ "\";"]
+               ++
+               prop_declarations node))
         (Just (TT.TArray $
               -- Constructor
               constructor node :
@@ -93,7 +98,10 @@ descript nodes =
       TT.inst TTS.class_declare
         (pack $ node_type_ident $ TN.node_type n_info)
         (Just "TS_Node")
-        (Just (TT.TArray $ prop_declarations node))
+        (Just (TT.TArray $
+               [pack $ "public static node_type = \"" ++ (TN.node_type n_info) ++ "\";"]
+               ++
+               prop_declarations node))
         (Just (TT.TArray $
                -- Constructor
                constructor node :
