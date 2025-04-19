@@ -14,6 +14,7 @@ module Template.TypeScriptTemplate
    prop_declare,
    const_declare,
    class_declare,
+   interface_declare,
    function_call,
    var_ref,
    node_type_assertion,
@@ -31,7 +32,6 @@ import Template.Template (Template(..), TArray(..), inst)
 import Formatting ((%), commaSep, text, optioned, spaced, formatToString)
 import Formatting.Formatters (build)
 import Data.Text.Lazy (Text, unpack, pack)
-import Utility (upper_the_first_char, validate_field_ident)
 import BackendDescription.NodeDescriptionHelper
 
 import_statement :: Template (TArray Text -> Text -> Text)
@@ -66,7 +66,7 @@ function_declare :: Template (-- Function Ident
                                -- Output as string
                                Text)
 function_declare = T $
-  "function " % text % "(" % build % ")" % (optioned (": " % text)) % " { " % build % " }"
+  "function " % text % "(" % commaSep build % ")" % (optioned (": " % text)) % " { " % build % " }"
 
 private_qualifier :: Template (Text -> Text)
 private_qualifier = T $ "private " % text
@@ -94,6 +94,22 @@ const_declare :: Template (TArray Text -> -- Parameters
                            Text)
 const_declare = T $ "constructor(" % build % ") { " % build % " }"
 
+composed_type_declare :: Bool -> -- Is Interface ?
+                         Template (
+                           -- Class Ident
+                           Text ->
+                           -- Base ident
+                           Maybe Text ->
+                           -- Properties
+                           Maybe (TArray Text) ->
+                           -- Methods
+                           Maybe (TArray Text) ->
+                           Text)
+composed_type_declare True = T $
+  "interface " % text % (optioned (" extends " % text)) % " { " % (optioned (spaced build)) % " " % (optioned (spaced build)) % " }"
+composed_type_declare False = T $
+  "class " % text % (optioned (" extends " % text)) % " { " % (optioned (spaced build)) % " " % (optioned (spaced build)) % " }"
+
 class_declare :: Template (-- Class Ident
                            Text ->
                            -- Base ident
@@ -103,8 +119,18 @@ class_declare :: Template (-- Class Ident
                            -- Methods
                            Maybe (TArray Text) ->
                            Text)
-class_declare = T $
-  "class " % text % (optioned (" extends " % text)) % " { " % (optioned (spaced build)) % " " % (optioned (spaced build)) % " }"
+class_declare = composed_type_declare False
+
+interface_declare :: Template (-- Class Ident
+                           Text ->
+                           -- Base ident
+                           Maybe Text ->
+                           -- Properties
+                           Maybe (TArray Text) ->
+                           -- Methods
+                           Maybe (TArray Text) ->
+                           Text)
+interface_declare = composed_type_declare True
 
 function_call :: Template (Text -> -- Function Identifier
                            Maybe (TArray Text) -> -- Parameters
@@ -182,4 +208,4 @@ switch_statements = inst $ T $ "switch (" % text % ") { " % build % " }"
 
 node_processor_proc_template :: Text -> Text -> Text -> Text
 node_processor_proc_template =
-  inst (T $ "if (this." % text % " != undefined) { results = this." % text % "(node as " % text % "); } break;")
+  inst (T $ "if (processor." % text % " != undefined) { results = processor." % text % "(node as " % text % "); } break;")
