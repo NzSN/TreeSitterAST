@@ -18,6 +18,7 @@ module Template.TypeScriptTemplate
    function_call,
    var_ref,
    node_type_assertion,
+   subtype_prop_initialize,
    prop_initialize,
    prop_initialize_array,
    field_initialize,
@@ -28,8 +29,10 @@ module Template.TypeScriptTemplate
    node_build_template
    ) where
 
-import Template.Template (Template(..), TArray(..), inst)
+import Data.Maybe
+import Data.List
 
+import Template.Template (Template(..), TArray(..), inst)
 import Formatting ((%), commaSep, text, optioned, spaced, formatToString)
 import Formatting.Formatters (build)
 import Data.Text.Lazy (Text, unpack, pack)
@@ -146,6 +149,11 @@ var_ref = T $ text
 node_type_assertion :: Template (Text -> Text)
 node_type_assertion = T $ "assert(node.type == \'" % text % "\');"
 
+subtype_prop_initialize :: Text -> Text
+subtype_prop_initialize n_type = inst
+  (T $ "if (node.type == \"" % text % "\") { this." % text % " = new " % text % "(node); }")
+  n_type (pack $ node_name_ident $ unpack n_type) (pack $ node_type_ident $ unpack n_type)
+
 prop_initialize :: Text -> Text -> Text -> Text
 prop_initialize = inst
   (T $
@@ -159,8 +167,8 @@ prop_initialize_array = inst
   (T $
    "this." % text % " = (new Searcher(node, \"" % text % "\")).searching_all(node.walk()).map(((n:Node) => new " % text % "(n)));")
 
-field_initialize :: Text -> [Text] -> Text
-field_initialize field_name types =
+field_initialize :: [Text] -> Text -> [Text] -> Text
+field_initialize supertypes field_name types =
   let s = inst (T $
                 "{\n\
                 \ let n: Node | null = node.childForFieldName(\"" % text % "\");\n")
@@ -170,18 +178,27 @@ field_initialize field_name types =
      field_type_check :: Text -> [Text] -> Text
      field_type_check _ [] = pack ""
      field_type_check prop_name (x:xs) =
-       pack $
-        (formatToString (
-            "if (n != null && n.type == \"" % text % "\") { \n\
-            \  this." % text % " = new " % text % "(n); \n\
-            \}\n")
-          x
-          (pack $ node_name_ident $ unpack prop_name)
-          (pack $ node_type_ident $ unpack x))
-        ++ (unpack $ field_type_check prop_name xs)
+       if isNothing $ flip find supertypes $ \y -> x == y
+        -- Not a Supertype
+        then pack $
+             (formatToString (
+                 "if (n != null && n.type == \"" % text % "\") { \n\
+                 \  this." % text % " = new " % text % "(n); \n\
+                 \}\n")
+              x
+              (pack $ node_name_ident $ unpack prop_name)
+              (pack $ node_type_ident $ unpack x))
+             ++ (unpack $ field_type_check prop_name xs)
+        -- A Supertype
+        else pack $
+             (formatToString (
+                 "if (n != null) { this." % text % " = new " % text % "(n);}")
+                 (pack $ node_name_ident $ unpack prop_name)
+                 (pack $ node_type_ident $ unpack x ))
+             ++ (unpack $ field_type_check prop_name xs)
 
-array_field_initialize :: Text -> [Text] -> Text
-array_field_initialize field_name types =
+array_field_initialize :: [Text] -> Text -> [Text] -> Text
+array_field_initialize supertypes field_name types =
   let s = inst (T $
                 "{\n\
                 \ let ns: (Node | null)[] = node.childrenForFieldName(\"" % text % "\");\n\
@@ -193,13 +210,21 @@ array_field_initialize field_name types =
      field_type_check :: Text -> [Text] -> Text
      field_type_check _ [] = pack ""
      field_type_check prop_name (x:xs) =
-       pack $
-        (formatToString (
-            "if (n.type == \"" % text % "\") { \n\
-            \  this." % text % ".push(new " % text % "(n)); \n\
-            \}\n")
-          x (pack $ node_name_ident $ unpack prop_name) (pack $ node_type_ident $ unpack x))
-        ++ (unpack $ field_type_check prop_name xs)
+       if isNothing $ flip find supertypes $ \y -> x == y
+        -- Not a Supertype
+        then pack $
+             (formatToString (
+                 "if (n.type == \"" % text % "\") { \n\
+                 \  this." % text % ".push(new " % text % "(n)); \n\
+                 \}\n")
+              x (pack $ node_name_ident $ unpack prop_name) (pack $ node_type_ident $ unpack x))
+             ++ (unpack $ field_type_check prop_name xs)
+        -- A Supertype
+        else pack $
+             (formatToString (
+                "this." % text % ".push(new " % text % "(n));")
+                (pack $ node_name_ident $ unpack prop_name) (pack $ node_type_ident $ unpack x))
+             ++ (unpack $ field_type_check prop_name xs)
 
 case_expression :: Text -> Text -> Text
 case_expression = inst $ T $ "case \"" % text % "\": " % text

@@ -1,4 +1,4 @@
-{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE OverloadedStrings, LambdaCase #-}
 module BackendDescription.NodeDescription (descript, node_type_ident) where
 
 import qualified TreeSitterNodes as TN
@@ -14,6 +14,20 @@ descript nodes =
   let node_desc = foldl' (\s n -> s ++ " " ++ node_proc n) "" nodes
   in prologue ++ node_desc ++ (unpack $ factory_function_declare nodes)
   where
+    supertypes :: [String]
+    supertypes =
+      flip map (flip filter nodes $ \case {
+                   TN.Leaf _ -> False;
+                     TN.Interior _ _ Nothing __ -> False;
+                     TN.Interior _ _ (Just _) __ -> True;})
+      $ \case {
+        -- Which should impossible
+        TN.Leaf (TN.NodeInfo _ _) -> undefined;
+        TN.Interior (TN.NodeInfo nt _) _ (Just _) _ -> nt
+      }
+    is_supertype :: String -> Bool
+    is_supertype t = length (flip filter supertypes $ \x -> x == t) > 0
+
     prologue :: String
     prologue =
       (unpack $
@@ -121,9 +135,9 @@ descript nodes =
       (TT.inst TTS.const_declare)
       (TT.TArray [TT.inst TTS.parameter_declare "node" "Node"])
       (TT.TArray $
-            prologue_proc node ++
+            subtype_prologue_proc node ++
             -- Prop initializations
-            map prop_initializer_from_node subtypes)
+            map subtype_prop_initializer_from_node subtypes)
 
     constructor node@(TN.Interior _ _ Nothing _) =
       (TT.inst TTS.const_declare)
@@ -206,6 +220,11 @@ descript nodes =
         -- Currently, non-named nodes is useless just ignore it
       else ""
 
+    subtype_prop_initializer_from_node :: TN.NodeInfo -> Text
+    subtype_prop_initializer_from_node (TN.NodeInfo _ False) = pack $ ""
+    subtype_prop_initializer_from_node (TN.NodeInfo t True) =
+      TTS.subtype_prop_initialize $ pack t
+
     prop_initializer_from_node :: TN.NodeInfo -> Text
     prop_initializer_from_node (TN.NodeInfo _ False) = pack $ ""
     prop_initializer_from_node n_info'@(TN.NodeInfo _ True) =
@@ -232,16 +251,24 @@ descript nodes =
         g :: String -> TN.Children -> [Text] -> [Text]
         g k (TN.Children _ False ts) a =
           a ++ [TTS.field_initialize
+                (map pack supertypes)
                 (pack k)
                 (map (pack . TN.node_type) (named_only_ts ts))]
 
         g k (TN.Children _ True  ts) a =
           a ++ [TTS.array_field_initialize
+                (map pack supertypes)
                 (pack k)
                 (map (pack . TN.node_type) (named_only_ts ts))]
 
         named_only_ts :: [TN.NodeInfo] -> [TN.NodeInfo]
         named_only_ts ts = flip filter ts $ \n_info -> (TN.named n_info == True)
+
+    subtype_prologue_proc :: TN.Node -> [Text]
+    subtype_prologue_proc node =
+      [TT.inst TTS.function_call
+       "super"
+       (Just $ TT.TArray [TT.inst TTS.var_ref "node"])]
 
     prologue_proc :: TN.Node -> [Text]
     prologue_proc node =

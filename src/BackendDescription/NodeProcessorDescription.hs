@@ -29,8 +29,8 @@ descript nodes =
         (TT.TArray $
          "TS_Node" :
           (flip map (named_nodes nodes) $
-            \case { (TN.Leaf (TN.NodeInfo nt _)) -> pack $ BNH.node_type_ident nt;
-                    (TN.Interior (TN.NodeInfo nt _) _ _ _) -> pack $ BNH.node_type_ident nt }))
+            \case { TN.Leaf (TN.NodeInfo nt _) -> pack $ BNH.node_type_ident nt;
+                    TN.Interior (TN.NodeInfo nt _) _ _ _ -> pack $ BNH.node_type_ident nt }))
         "./node_declare")
       ++
       ("export type OutputTarget = string;")
