@@ -13,7 +13,7 @@ import BackendDescription.NodeDescriptionHelper
 descript :: [TN.Node] -> String
 descript nodes =
   let node_desc = foldl' (\s n -> s ++ " " ++ node_proc n) "" nodes
-  in prologue ++ node_desc
+  in prologue ++ node_desc ++ (unpack $ factory_function_declare nodes)
   where
     prologue :: String
     prologue =
@@ -240,3 +240,29 @@ descript nodes =
        "super"
        (Just $ TT.TArray [TT.inst TTS.var_ref "node"]),
        TT.inst TTS.node_type_assertion $ pack $ TN.node_type $ TN.info node]
+
+    factory_function_declare :: [TN.Node] -> Text
+    factory_function_declare nodes'' =
+      TT.inst TTS.export_qualifier $
+      TT.inst TTS.function_declare "tsNodeFactory"
+      (TT.TArray [ "node: Node" ])
+      (Just "TS_Node")
+      (TT.TArray [
+            TTS.switch_statements "node.type" case_expressions,
+            "throw new Error(\"Unsupported node type:\" + node.type);"
+          ])
+      where
+        case_expressions :: TT.TArray Text
+        case_expressions = TT.TArray $ map case_expressions' nodes''
+
+        case_expressions' :: TN.Node -> Text
+        case_expressions' (TN.Leaf (TN.NodeInfo _ False)) = ""
+        case_expressions' (TN.Leaf (TN.NodeInfo t _)) =
+          TTS.case_expression
+            (pack t)
+            (TTS.node_build_template $ pack t)
+        case_expressions' (TN.Interior (TN.NodeInfo _ False) _ _ _) = ""
+        case_expressions' (TN.Interior (TN.NodeInfo t _) _ _ _) =
+          TTS.case_expression
+          (pack t)
+          (TTS.node_build_template $ pack t)

@@ -24,7 +24,8 @@ module Template.TypeScriptTemplate
    array_field_initialize,
    case_expression,
    switch_statements,
-   node_processor_proc_template
+   node_processor_proc_template,
+   node_build_template
    ) where
 
 import Template.Template (Template(..), TArray(..), inst)
@@ -209,3 +210,8 @@ switch_statements = inst $ T $ "switch (" % text % ") { " % build % " }"
 node_processor_proc_template :: Text -> Text -> Text -> Text
 node_processor_proc_template =
   inst (T $ "if (processor." % text % " != undefined) { results = processor." % text % "(node as " % text % "); } break;")
+
+node_build_template :: Text -> Text
+node_build_template n_type =
+  inst (T $ "return new " % text % "(node);")
+        (pack $ node_type_ident $ unpack n_type)
