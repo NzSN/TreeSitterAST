@@ -31,6 +31,7 @@ descript nodes =
           "../../parser/ast_helper")
       ++
       "\n\
+      \export type TSNodeType = String;\n\
       \export class TS_Node { \n\
         \private node_: Node; \n\
         \private start_index_: number; \n\
