@@ -41,14 +41,17 @@ descript nodes =
 
     build_node_processor :: [TN.Node] -> String
     build_node_processor nodes' =
-        unpack $
-        TT.inst TTS.export_qualifier $
-        (TT.inst TTS.class_declare)
-        (pack "NodeProcessor<T extends Show>")
-        Nothing
-        (Just (TT.TArray $ basic_prop ++
+        (unpack $
+          TT.inst TTS.export_qualifier $
+          (TT.inst TTS.interface_declare)
+          (pack "NodeProcessor<T extends Show>")
+          Nothing
+          (Just (TT.TArray $ basic_prop ++
                            (map processor_prop_declare nodes')))
-        (Just (TT.TArray [trans_method_declare nodes']))
+          (Just (TT.TArray [])))
+        ++
+        (unpack $ trans_function_declare nodes')
+
       where
         basic_prop :: [Text]
         basic_prop = [
@@ -70,10 +73,11 @@ descript nodes =
         prop_type_declare t =
           pack $ "((N: " ++ (BN.node_type_ident t) ++ ") => [OutputTarget, T][]) | undefined"
 
-        trans_method_declare :: [TN.Node] -> Text
-        trans_method_declare nodes'' =
-          TT.inst TTS.method_declare "proc"
-                (TT.TArray [ "node:TS_Node"])
+        trans_function_declare :: [TN.Node] -> Text
+        trans_function_declare nodes'' =
+          TT.inst TTS.export_qualifier $
+          TT.inst TTS.function_declare "proc<T extends Show>"
+                (TT.TArray [ "processor: NodeProcessor<T>", "node:TS_Node"])
                 (Just "[OutputTarget, T][] | null")
                 (TT.TArray [
                     -- Statements
