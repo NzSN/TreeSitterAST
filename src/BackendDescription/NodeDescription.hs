@@ -55,7 +55,9 @@ descript nodes =
         \    this.start_index_ = node.startIndex;\n\
         \    this.end_index_ = node.endIndex;\n\
         \}\n\
-        \\n\
+        \public getNode() {\n\
+        \  return this.node_;\n\
+        \}\n\
         \public getText() {\n\
         \    return this.node_.text;\n\
         \}\n\
