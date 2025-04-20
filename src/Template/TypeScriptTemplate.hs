@@ -151,21 +151,45 @@ node_type_assertion = T $ "assert(node.type == \'" % text % "\');"
 
 subtype_prop_initialize :: Text -> Text
 subtype_prop_initialize n_type = inst
-  (T $ "if (node.type == \"" % text % "\") { this." % text % " = new " % text % "(node); }")
+  (T $ "if (node.type == \"" % text % "\") { this." % text % " = new " % text % "(node); this.is_supertype_setup = true; }")
   n_type (pack $ node_name_ident $ unpack n_type) (pack $ node_type_ident $ unpack n_type)
 
-prop_initialize :: Text -> Text -> Text -> Text
-prop_initialize = inst
-  (T $
-   "{\n\
-    \ let r = (new Searcher(node, \"" % text % "\")).searching_next(node.walk());\n\
-    \ if (r != null) { this." % text % " = new " % text % "(r); }\n\
-    \}")
+prop_initialize :: [Text] -> Text -> Text -> Text -> Text
+prop_initialize supertypes prop_name node_type node_type_t =
+  if isNothing $ flip find supertypes $ \y -> node_type == y
+  then inst (T $
+        "{\n\
+        \ let r = (new Searcher(node, \"" % text % "\")).searching_next(node.walk());\n\
+        \ if (r != null) { this." % text % " = new " % text % "(r); }\n\
+        \}")
+       prop_name node_type node_type_t
+  else inst (T $
+            "this.getNode().children.forEach((n:Node) => {\n\
+            \ let v = new " % text % "(n);\n\
+            \ if (v.is_supertype_setup) {\n\
+            \   this." % text % " = v;\n\
+            \ } \n\
+            \})")
+       node_type_t prop_name
 
-prop_initialize_array :: Text -> Text -> Text -> Text
-prop_initialize_array = inst
-  (T $
-   "this." % text % " = (new Searcher(node, \"" % text % "\")).searching_all(node.walk()).map(((n:Node) => new " % text % "(n)));")
+prop_initialize_array :: [Text] -> Text -> Text -> Text -> Text
+prop_initialize_array supertypes prop_name node_type node_type_t =
+  if isNothing $ flip find supertypes $ \y -> node_type == y
+  then inst (T $
+        "this." % text % " = (new Searcher(node, \"" % text % "\")).searching_all(node.walk()).map(((n:Node) => new " % text % "(n)));")
+       prop_name node_type node_type_t
+  else inst (T $
+             "this.getNode().children.forEach((n:Node) => {\n\
+             \ let v = new " % text % "(n);\n\
+             \ if (v.is_supertype_setup) {\n\
+             \   if (this." % text % "== undefined) {\n\
+             \     this." % text % " = [];\n\
+             \   } \n\
+             \   this." % text % ".push(v);\n\
+             \ } \n\
+             \})")
+        node_type_t prop_name prop_name prop_name
+
 
 field_initialize :: [Text] -> Text -> [Text] -> Text
 field_initialize supertypes field_name types =

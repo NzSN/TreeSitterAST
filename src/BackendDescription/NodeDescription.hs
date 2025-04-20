@@ -49,6 +49,7 @@ descript nodes =
         \private node_: Node; \n\
         \private start_index_: number; \n\
         \private end_index_: number;\n\
+        \public is_supertype_setup = false;\n\
         \\n\
         \constructor(node: Node) {\n\
         \    this.node_ = node;\n\
@@ -230,7 +231,7 @@ descript nodes =
     prop_initializer_from_node :: TN.NodeInfo -> Text
     prop_initializer_from_node (TN.NodeInfo _ False) = pack $ ""
     prop_initializer_from_node n_info'@(TN.NodeInfo _ True) =
-      TTS.prop_initialize node_type' prop_ident t_ident
+      TTS.prop_initialize (map pack supertypes) node_type' prop_ident t_ident
       where
         prop_ident = pack $ node_name_ident $ TN.node_type n_info'
         node_type' = pack $ TN.node_type n_info'
@@ -240,6 +241,7 @@ descript nodes =
     array_prop_initializer_from_node n_info' =
       let node_type' = pack $ TN.node_type n_info'
       in TTS.prop_initialize_array
+         (map pack supertypes)
          (pack $ node_name_ident $ unpack node_type')
          node_type'
          (pack $ node_type_ident $ unpack node_type')
