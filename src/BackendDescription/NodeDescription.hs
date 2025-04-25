@@ -25,7 +25,6 @@ descript nodes =
         TN.Leaf (TN.NodeInfo _ _) -> undefined;
         TN.Interior (TN.NodeInfo nt _) _ (Just _) _ -> nt
       }
-    is_supertype :: String -> Bool
     is_supertype t = length (flip filter supertypes $ \x -> x == t) > 0
 
     prologue :: String
@@ -226,7 +225,7 @@ descript nodes =
     subtype_prop_initializer_from_node :: TN.NodeInfo -> Text
     subtype_prop_initializer_from_node (TN.NodeInfo _ False) = pack $ ""
     subtype_prop_initializer_from_node (TN.NodeInfo t True) =
-      TTS.subtype_prop_initialize $ pack t
+      TTS.subtype_prop_initialize (map pack supertypes) $ pack t
 
     prop_initializer_from_node :: TN.NodeInfo -> Text
     prop_initializer_from_node (TN.NodeInfo _ False) = pack $ ""
