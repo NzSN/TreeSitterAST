@@ -67,6 +67,7 @@ library
                      BackendDescription.NodeProcessorDescription,
                      BackendDescription.NodeDescription,
                      BackendDescription.NodeDescriptionHelper,
+                     TemplateFunction.TemplateF,
 
 
     -- Modules included in this library but not exported.
