@@ -1,4 +1,4 @@
-{-# LANGUAGE OverloadedStrings, TemplateHaskell, TemplateHaskellQuotes #-}
+{-# LANGUAGE OverloadedStrings, TemplateHaskell, TemplateHaskellQuotes, MultilineStrings #-}
 module Template.TypeScriptTemplate
   (import_statement,
    import_all_statement,
@@ -164,19 +164,19 @@ prop_initialize :: [Text] -> Text -> Text -> Text -> Text
 prop_initialize supertypes node_type prop_name node_type_t =
   if isNothing $ flip find supertypes $ \y -> node_type == y
   then inst (T $
-        "{\n\
-        \ let r = (new Searcher(node, \"" % text % "\")).searching_next(node.walk());\n\
-        \ if (r != null) { this." % text % " = new " % text % "(r); }\n\
-        \}")
+        """{
+        let r = (new Searcher(node, \" """ % text % """ \")).searching_next(node.walk());
+        if (r != null) { this.""" % text % " = new " % text % """(r); }
+        }""")
        node_type prop_name node_type_t
   else inst (T $
-            "this.getNode().children.forEach((n:Node | null) => {\n\
-            \ if (n == null) return;\n\
-            \ let v = new " % text % "(n);\n\
-            \ if (v.is_supertype_setup) {\n\
-            \   this." % text % " = v;\n\
-            \ } \n\
-            \});")
+            """this.getNode().children.forEach((n:Node | null) => {
+             if (n == null) return;
+             let v = new """ % text % """(n);
+             if (v.is_supertype_setup) {
+               this.""" % text % """ = v;
+             }
+            });""")
        node_type_t prop_name
 
 prop_initialize_array :: [Text] -> Text -> Text -> Text -> Text
@@ -186,24 +186,24 @@ prop_initialize_array supertypes prop_name node_type node_type_t =
         "this." % text % " = (new Searcher(node, \"" % text % "\")).searching_all(node.walk()).map(((n:Node) => new " % text % "(n)));")
        prop_name node_type node_type_t
   else inst (T $
-             "this.getNode().children.forEach((n:Node | null) => {\n\
-             \ if (n == null) return;\n\
-             \ let v = new " % text % "(n);\n\
-             \ if (v.is_supertype_setup) {\n\
-             \   if (this." % text % "== undefined) {\n\
-             \     this." % text % " = [];\n\
-             \   } \n\
-             \   this." % text % ".push(v);\n\
-             \ } \n\
-             \});")
+             """this.getNode().children.forEach((n:Node | null) => {
+              if (n == null) return;
+              let v = new """ % text % """(n);
+              if (v.is_supertype_setup) {
+                if (this.""" % text % """== undefined) {
+                  this.""" % text % """ = [];
+                }
+                this.""" % text % """.push(v);
+              }
+             });""")
         node_type_t prop_name prop_name prop_name
 
 
 field_initialize :: [Text] -> Text -> [Text] -> Text
 field_initialize supertypes field_name types =
   let s = inst (T $
-                "{\n\
-                \ let n: Node | null = node.childForFieldName(\"" % text % "\");\n")
+                """{
+                 let n: Node | null = node.childForFieldName(\"""" % text % "\");\n")
                 field_name
   in pack $ (unpack s) ++ (unpack $ field_type_check field_name types) ++ "\n}\n"
    where
@@ -214,9 +214,9 @@ field_initialize supertypes field_name types =
         -- Not a Supertype
         then pack $
              (formatToString (
-                 "if (n != null && n.type == \"" % text % "\") { \n\
-                 \  this." % text % " = new " % text % "(n); \n\
-                 \}\n")
+                 """if (n != null && n.type == \"""" % text % """\") {
+                   this.""" % text % " = new " % text % """(n);
+                 }""")
               x
               (pack $ node_name_ident $ unpack prop_name)
               (pack $ node_type_ident $ unpack x))
@@ -232,10 +232,10 @@ field_initialize supertypes field_name types =
 array_field_initialize :: [Text] -> Text -> [Text] -> Text
 array_field_initialize supertypes field_name types =
   let s = inst (T $
-                "{\n\
-                \ let ns: (Node | null)[] = node.childrenForFieldName(\"" % text % "\");\n\
-                \ ns.forEach((n: Node | null) => {\n\
-                \ if (n == null) return;\n")
+                """{
+                 let ns: (Node | null)[] = node.childrenForFieldName(\"""" % text % """\");
+                 ns.forEach((n: Node | null) => {
+                 if (n == null) return;\n""")
                 field_name
   in pack $ (unpack s) ++ (unpack $ field_type_check field_name types) ++ "}) \n}\n"
    where
@@ -246,9 +246,9 @@ array_field_initialize supertypes field_name types =
         -- Not a Supertype
         then pack $
              (formatToString (
-                 "if (n.type == \"" % text % "\") { \n\
-                 \  this." % text % ".push(new " % text % "(n)); \n\
-                 \}\n")
+                 "if (n.type == \"" % text % """\") {
+                   this.""" % text % ".push(new " % text % """(n));
+                 }""")
               x (pack $ node_name_ident $ unpack prop_name) (pack $ node_type_ident $ unpack x))
              ++ (unpack $ field_type_check prop_name xs)
         -- A Supertype
