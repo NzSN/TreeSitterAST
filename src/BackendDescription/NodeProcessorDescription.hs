@@ -22,35 +22,36 @@ descript nodes =
 
     prologue :: String
     prologue =
-      (unpack $ T_T.inst T_TS.import_statement
+      unpack (T_T.inst T_TS.import_statement
         (T_T.TArray ["Show"]) "../source")
       ++
-      (unpack $ T_T.inst T_TS.import_statement
-        (T_T.TArray $
+      unpack (T_T.inst T_TS.import_statement
+        (T_T.TArray (
          "TS_Node" :
-          (flip map (named_nodes nodes) $
-            \case { Ns.Leaf (Ns.NodeInfo nt _) -> pack $ BNH.node_type_ident nt;
-                    Ns.Interior (Ns.NodeInfo nt _) _ _ _ -> pack $ BNH.node_type_ident nt }))
+          map
+            (\case { Ns.Leaf    (Ns.NodeInfo nt _)       -> pack $ BNH.node_type_ident nt;
+                    Ns.Interior (Ns.NodeInfo nt _) _ _ _ -> pack $ BNH.node_type_ident nt })
+            (named_nodes nodes)))
         "./node_declare")
       ++
-      ("export type OutputTarget = string;")
+      "export type OutputTarget = string;"
 
     -- Assume that all nodes are named
     node_proc :: [Ns.Node] -> String
-    node_proc nodes' = build_node_processor nodes'
+    node_proc = build_node_processor
 
     build_node_processor :: [Ns.Node] -> String
     build_node_processor nodes' =
-        (unpack $
-          T_T.inst T_TS.export_qualifier $
-          (T_T.inst T_TS.interface_declare)
+        unpack (
+          T_T.inst T_TS.export_qualifier (
+          T_T.inst T_TS.interface_declare
           (pack "NodeProcessor<T extends Show>")
           Nothing
-          (Just (T_T.TArray $ basic_prop ++
-                           (map processor_prop_declare nodes')))
-          (Just (T_T.TArray [])))
+          (Just (T_T.TArray $
+                  basic_prop ++ map processor_prop_declare nodes'))
+          (Just (T_T.TArray []))))
         ++
-        (unpack $ trans_function_declare nodes')
+        unpack (trans_function_declare nodes')
 
       where
         basic_prop :: [Text]
@@ -71,7 +72,7 @@ descript nodes =
                 (prop_type_declare t)
         prop_type_declare :: String -> Text
         prop_type_declare t =
-          pack $ "((N: " ++ (BN.node_type_ident t) ++ ") => [OutputTarget, T][]) | undefined"
+          pack $ "((N: " ++ BN.node_type_ident t ++ ") => [OutputTarget, T][]) | undefined"
 
         trans_function_declare :: [Ns.Node] -> Text
         trans_function_declare nodes'' =

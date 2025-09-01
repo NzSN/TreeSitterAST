@@ -5,14 +5,13 @@ import qualified TreeSitterNodes as Ns
 import qualified Template.Template as T_T
 import qualified Template.TypeScriptTemplate as T_TS
 import Data.Text.Lazy (pack, Text, unpack)
-import Data.Maybe (isNothing,fromJust)
 import qualified Data.Map as Map
 import BackendDescription.NodeDescriptionHelper
 
 descript :: [Ns.Node] -> String
 descript nodes =
   let node_desc = foldl' (\s n -> s ++ " " ++ node_proc n) "" nodes
-  in prologue ++ node_desc ++ (unpack $ factory_function_declare nodes)
+  in prologue ++ node_desc ++ unpack (factory_function_declare nodes)
   where
     supertypes :: [String]
     supertypes =
@@ -22,23 +21,22 @@ descript nodes =
                      Ns.Interior _ _ (Just _) __ -> True;})
       $ \case {
         -- Which should impossible
-        Ns.Leaf (Ns.NodeInfo _ _) -> undefined;
-        Ns.Interior (Ns.NodeInfo nt _) _ (Just _) _ -> nt
+        Ns.Leaf _ -> undefined;
+        Ns.Interior _ _ Nothing _ -> undefined;
+        Ns.Interior (Ns.NodeInfo nt _) _ (Just _) _ -> nt;
       }
-    is_supertype t = length (flip filter supertypes $ \x -> x == t) > 0
 
     prologue :: String
-    prologue =
-      (unpack $
-        T_T.inst T_TS.import_statement
+    prologue = unpack
+      (T_T.inst T_TS.import_statement
           (T_T.TArray ["strict as assert"]) "assert")
       ++
-      (unpack $
-        T_T.inst T_TS.import_statement
+      unpack
+        (T_T.inst T_TS.import_statement
           (T_T.TArray ["Node"]) "web-tree-sitter")
       ++
-      (unpack $
-        T_T.inst T_TS.import_statement
+      unpack
+        (T_T.inst T_TS.import_statement
           (T_T.TArray ["Searcher"])
           "../../parser/ast_helper")
       ++
@@ -83,14 +81,13 @@ descript nodes =
 
     leaf_node :: Ns.Node -> Text
     leaf_node (Ns.Leaf n_info) = T_T.inst T_TS.export_qualifier $
-      (T_T.inst T_TS.class_declare)
+      T_T.inst T_TS.class_declare
         (pack $ node_type_ident $ Ns.node_type n_info)     -- Class Identifier
         (Just "TS_Node")                                        -- Base Class
         (Just (T_T.TArray $
-               [pack $ "public static node_type = \"" ++ (Ns.node_type n_info) ++ "\";"]
-               ++
+               pack ("public static node_type = \"" ++ Ns.node_type n_info ++ "\";") :
                prop_declarations (Ns.Leaf n_info))) -- Properties
-        (Just (T_T.TArray $ constructor (Ns.Leaf n_info) : []))  -- Constructor
+        (Just (T_T.TArray [constructor (Ns.Leaf n_info)]))  -- Constructor
     leaf_node _ = undefined
 
     interior_node :: Ns.Node -> Text
@@ -101,14 +98,9 @@ descript nodes =
         (pack $ node_type_ident $ Ns.node_type n_info)
         (Just "TS_Node")
         (Just (T_T.TArray $
-               [pack $ "public static node_type = \"" ++ (Ns.node_type n_info) ++ "\";"]
-               ++
+               pack ("public static node_type = \"" ++ Ns.node_type n_info ++ "\";") :
                prop_declarations node))
-        (Just (T_T.TArray $
-              -- Constructor
-              constructor node :
-              -- Extra Methods
-              []))
+        (Just (T_T.TArray [constructor node]))
 
     interior_node node@(Ns.Interior n_info _ (Just _) _) =
       T_T.inst T_TS.export_qualifier $
@@ -116,26 +108,21 @@ descript nodes =
         (pack $ node_type_ident $ Ns.node_type n_info)
         (Just "TS_Node")
         (Just (T_T.TArray $
-               [pack $ "public static node_type = \"" ++ (Ns.node_type n_info) ++ "\";"]
-               ++
+               pack ("public static node_type = \"" ++ Ns.node_type n_info ++ "\";") :
                prop_declarations node))
-        (Just (T_T.TArray $
-               -- Constructor
-               constructor node :
-               -- Extra Methods
-               []))
+        (Just (T_T.TArray [constructor node]))
     interior_node _ = undefined
 
     constructor :: Ns.Node -> Text
     constructor node@(Ns.Leaf _) =
-      (T_T.inst T_TS.const_declare)
+      T_T.inst T_TS.const_declare
       -- Parameters
       (T_T.TArray [T_T.inst T_TS.parameter_declare "node" "Node"])
       -- Body Statements
       (T_T.TArray $ prologue_proc node)
     -- There should be only child node of a node wtih subtypes fields is non-Nothing
     constructor node@(Ns.Interior _ Nothing (Just subtypes) Nothing) =
-      (T_T.inst T_TS.const_declare)
+      T_T.inst T_TS.const_declare
       (T_T.TArray [T_T.inst T_TS.parameter_declare "node" "Node"])
       (T_T.TArray $
             subtype_prologue_proc node ++
@@ -143,7 +130,7 @@ descript nodes =
             map subtype_prop_initializer_from_node subtypes)
 
     constructor node@(Ns.Interior _ _ Nothing _) =
-      (T_T.inst T_TS.const_declare)
+      T_T.inst T_TS.const_declare
       (T_T.TArray [T_T.inst T_TS.parameter_declare "node" "Node"])
       (T_T.TArray $
             prologue_proc node ++
@@ -170,19 +157,15 @@ descript nodes =
     prop_declarations (Ns.Interior _ Nothing (Just n_infos) Nothing) =
       map (type_declare False) n_infos
     prop_declarations (Ns.Interior _ fields Nothing children) =
-      let field_declares = if isNothing fields
-                            then []
-                            else field_prop_declare (fromJust fields)
-          child_declares = if isNothing children
-                            then []
-                            else child_prop_declare (fromJust children)
+      let field_declares = maybe [] field_prop_declare fields
+          child_declares = maybe [] child_prop_declare children
       in field_declares ++ child_declares
       where
         field_prop_declare :: Map.Map String Ns.Children -> [Text]
         field_prop_declare field_map =
           Map.foldrWithKey g [] (flip Map.filter field_map $
-                                 \x -> length (Ns.types x) > 0 &&
-                                       (flip (flip foldl' False) (Ns.types x) $ \a y -> (Ns.named y) || a) == True)
+                                 \x -> not (null (Ns.types x)) &&
+                                       foldl' (\a y -> Ns.named y || a) False (Ns.types x))
           where
             g :: String -> Ns.Children -> [Text] -> [Text]
             g k v a = a ++ [
@@ -191,14 +174,14 @@ descript nodes =
             field_type :: Ns.Children -> Text
             -- Which is impossible
             field_type (Ns.Children _ True ts)  =
-              let r = flip (flip foldl' "") ts $
-                    \acc n_info -> acc ++ (field_type' n_info) ++ " | "
+              let r = flip (`foldl'` "") ts $
+                    \acc n_info -> acc ++ field_type' n_info ++ " | "
                   w = words r
-              in  pack $ "(" ++ (unwords $ take (length w - 1) $ w) ++ ")[] = [];"
+              in  pack $ "(" ++ unwords (take (length w - 1) w) ++ ")[] = [];"
 
             field_type (Ns.Children _ False ts) =
-              let r = flip (flip foldl' "") ts $
-                    \acc n_info -> acc ++ (field_type' n_info) ++ " | "
+              let r = flip (`foldl'` "") ts $
+                    \acc n_info -> acc ++ field_type' n_info ++ " | "
               in  pack $ r ++ "undefined;"
 
             field_type' :: Ns.NodeInfo -> String
@@ -224,12 +207,12 @@ descript nodes =
       else ""
 
     subtype_prop_initializer_from_node :: Ns.NodeInfo -> Text
-    subtype_prop_initializer_from_node (Ns.NodeInfo _ False) = pack $ ""
+    subtype_prop_initializer_from_node (Ns.NodeInfo _ False) = pack ""
     subtype_prop_initializer_from_node (Ns.NodeInfo t True) =
       T_TS.subtype_prop_initialize (map pack supertypes) $ pack t
 
     prop_initializer_from_node :: Ns.NodeInfo -> Text
-    prop_initializer_from_node (Ns.NodeInfo _ False) = pack $ ""
+    prop_initializer_from_node (Ns.NodeInfo _ False) = pack ""
     prop_initializer_from_node n_info'@(Ns.NodeInfo _ True) =
       T_TS.prop_initialize (map pack supertypes) node_type' prop_ident t_ident
       where
@@ -266,10 +249,10 @@ descript nodes =
                 (map (pack . Ns.node_type) (named_only_ts ts))]
 
         named_only_ts :: [Ns.NodeInfo] -> [Ns.NodeInfo]
-        named_only_ts ts = flip filter ts $ \n_info -> (Ns.named n_info == True)
+        named_only_ts ts = flip filter ts $ \n_info -> Ns.named n_info
 
     subtype_prologue_proc :: Ns.Node -> [Text]
-    subtype_prologue_proc node =
+    subtype_prologue_proc _ =
       [T_T.inst T_TS.function_call
        "super"
        (Just $ T_T.TArray [T_T.inst T_TS.var_ref "node"])]
