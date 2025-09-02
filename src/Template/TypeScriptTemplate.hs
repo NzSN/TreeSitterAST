@@ -1,4 +1,4 @@
-{-# LANGUAGE OverloadedStrings, TemplateHaskell, TemplateHaskellQuotes, MultilineStrings #-}
+{-# LANGUAGE OverloadedStrings, MultilineStrings #-}
 module Template.TypeScriptTemplate
   (import_statement,
    import_all_statement,
@@ -70,7 +70,7 @@ function_declare :: Template (-- Function Ident
                                -- Output as string
                                Text)
 function_declare = T $
-  "function " % text % "(" % commaSep build % ")" % (optioned (": " % text)) % " { " % build % " }"
+  "function " % text % "(" % commaSep build % ")" % optioned (": " % text) % " { " % build % " }"
 
 private_qualifier :: Template (Text -> Text)
 private_qualifier = T $ "private " % text
@@ -88,7 +88,7 @@ method_declare :: Template (-- Method Ident
                             TArray Text ->
                             Text)
 method_declare = T $
-  text % "(" % build % ")" % (optioned (": " % text)) % " { " % build % " }"
+  text % "(" % build % ")" % optioned (": " % text) % " { " % build % " }"
 
 prop_declare :: Template (Text -> Text -> Text)
 prop_declare = T $ text % " : " % text % ";"
@@ -110,9 +110,9 @@ composed_type_declare :: Bool -> -- Is Interface ?
                            Maybe (TArray Text) ->
                            Text)
 composed_type_declare True = T $
-  "interface " % text % (optioned (" extends " % text)) % " { " % (optioned (spaced build)) % " " % (optioned (spaced build)) % " }"
+  "interface " % text % optioned (" extends " % text) % " { " % optioned (spaced build) % " " % optioned (spaced build) % " }"
 composed_type_declare False = T $
-  "class " % text % (optioned (" extends " % text)) % " { " % (optioned (spaced build)) % " " % (optioned (spaced build)) % " }"
+  "class " % text % optioned (" extends " % text) % " { " % optioned (spaced build) % " " % optioned (spaced build) % " }"
 
 class_declare :: Template (-- Class Ident
                            Text ->
@@ -205,7 +205,7 @@ field_initialize supertypes field_name types =
                 """{
                  let n: Node | null = node.childForFieldName(\"""" % text % "\");\n")
                 field_name
-  in pack $ (unpack s) ++ (unpack $ field_type_check field_name types) ++ "\n}\n"
+  in pack $ unpack s ++ unpack (field_type_check field_name types) ++ "\n}\n"
    where
      field_type_check :: Text -> [Text] -> Text
      field_type_check _ [] = pack ""
@@ -223,11 +223,11 @@ field_initialize supertypes field_name types =
              ++ (unpack $ field_type_check prop_name xs)
         -- A Supertype
         else pack $
-             (formatToString (
-                 "if (n != null) { this." % text % " = new " % text % "(n);}")
-                 (pack $ node_name_ident $ unpack prop_name)
-                 (pack $ node_type_ident $ unpack x ))
-             ++ (unpack $ field_type_check prop_name xs)
+             formatToString
+                 ("if (n != null) { this." % text % " = new " % text % "(n);}")
+                 (pack (node_name_ident (unpack prop_name)))
+                 (pack (node_type_ident (unpack x )))
+             ++ unpack (field_type_check prop_name xs)
 
 array_field_initialize :: [Text] -> Text -> [Text] -> Text
 array_field_initialize supertypes field_name types =
@@ -237,7 +237,7 @@ array_field_initialize supertypes field_name types =
                  ns.forEach((n: Node | null) => {
                  if (n == null) return;\n""")
                 field_name
-  in pack $ (unpack s) ++ (unpack $ field_type_check field_name types) ++ "}) \n}\n"
+  in pack $ unpack s ++ unpack (field_type_check field_name types) ++ "}) \n}\n"
    where
      field_type_check :: Text -> [Text] -> Text
      field_type_check _ [] = pack ""
@@ -253,10 +253,10 @@ array_field_initialize supertypes field_name types =
              ++ (unpack $ field_type_check prop_name xs)
         -- A Supertype
         else pack $
-             (formatToString (
+             formatToString (
                 "this." % text % ".push(new " % text % "(n));")
-                (pack $ node_name_ident $ unpack prop_name) (pack $ node_type_ident $ unpack x))
-             ++ (unpack $ field_type_check prop_name xs)
+                (pack $ node_name_ident $ unpack prop_name) (pack $ node_type_ident $ unpack x)
+             ++ unpack (field_type_check prop_name xs)
 
 case_expression :: Text -> Text -> Text
 case_expression = inst $ T $ "case \"" % text % "\": " % text
