@@ -14,6 +14,7 @@ grammar_nodes_spec :: TestTree
 grammar_nodes_spec = testGroup "TreeSitterGrammarNodes Tests"
   [ testCase "Parse sample grammar.json file" $ do
       result <- runMaybeT $ parseGrammarFromFile "sample/grammar.json"
+
       case result of
         Nothing -> assertFailure "Failed to parse grammar.json"
         Just grammar -> do

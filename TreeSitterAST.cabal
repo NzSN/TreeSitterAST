@@ -68,6 +68,7 @@ library
                      TypedASTGenerator.NodeProcessorDescription,
                      TypedASTGenerator.NodeDescription,
                      TypedASTGenerator.NodeDescriptionHelper,
+                     ProgBuilder.ProgBuilderDescription,
 
 
     -- Modules included in this library but not exported.
