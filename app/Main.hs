@@ -1,9 +1,7 @@
 module Main where
 
 import Args (Mode(..), parseArgs)
-
 import Control.Monad.Trans.Maybe
-
 import qualified TreeSitterNodes as TS
 import qualified TypedASTGenerator.NodeDescription as BN
 import qualified TypedASTGenerator.NodeProcessorDescription as BP
@@ -11,9 +9,9 @@ import qualified TypedASTGenerator.NodeProcessorDescription as BP
 main :: IO ()
 main = do
   (mode, path) <- parseArgs
-  treeSitterNodes <- runMaybeT $ TS.parse_node_types path
+  ns <- runMaybeT $ TS.parse_node_types path
 
-  maybe reportError (transform mode) treeSitterNodes
+  maybe reportError (transform mode) ns
   where
     reportError = error "Fail to parse node_typs.json or grammar.json"
 
@@ -23,9 +21,9 @@ main = do
       CodeGen -> progBuilderGen
 
 astGen :: [TS.Node] -> IO ()
-astGen nodes =
-  writeFile "node_declare.ts" (BN.descript nodes) >>
-  writeFile "node_processor.ts" (BP.descript nodes)
+astGen ns =
+  writeFile "node_declare.ts" (BN.descript ns) >>
+  writeFile "node_processor.ts" (BP.descript ns)
 
 progBuilderGen :: [TS.Node] -> IO ()
 progBuilderGen _ =

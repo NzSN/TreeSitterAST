@@ -60,6 +60,7 @@ library
 
     -- Modules exported by the library.
     exposed-modules: TreeSitterNodes,
+                     TreeSitterGrammarNodes,
                      Template.Template,
                      Template.TypeScriptTemplate,
                      Fundamentals.File,
@@ -127,6 +128,7 @@ test-suite TreeSitterAST-test
     -- Modules included in this executable, other than Main.
     other-modules: Template.TypeScriptTemplateSpec,
                    Fundamentals.FileSpec,
+                   TreeSitterGrammarNodesSpec,
 
     -- LANGUAGE extensions used by modules in this package.
     -- other-extensions:
@@ -144,6 +146,8 @@ test-suite TreeSitterAST-test
     build-depends:
         base ^>=4.21.0.0,
         TreeSitterAST,
+        transformers >= 0.6.1.2,
+        containers,
         HUnit >= 1.6.2.0,
         QuickCheck >= 2.15.0.1,
         tasty >= 1.5.3,

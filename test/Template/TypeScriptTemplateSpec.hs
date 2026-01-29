@@ -17,5 +17,5 @@ template_testcase = testGroup "Template Tests"
         (Just $ TArray ["1", "2"])
         -- Methods
         (Just $ TArray ["3", "4"])) @?=
-        "class CC implements Base { 1 2 3 4 }"
+        "class CC extends Base { 1 2 3 4 }"
   ]
