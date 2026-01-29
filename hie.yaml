@@ -1,10 +1,13 @@
 cradle:
   cabal:
-    - path: "src"
+    - path: "./src"
       component: "lib:TreeSitterAST"
 
-    - path: "app/Main.hs"
+    - path: "./app/Main.hs"
       component: "TreeSitterAST:exe:TreeSitterAST"
 
-    - path: "test"
+    - path: "./app/Args.hs"
+      component: "TreeSitterAST:exe:TreeSitterAST"
+
+    - path: "./test"
       component: "TreeSitterAST:test:TreeSitterAST-test"
