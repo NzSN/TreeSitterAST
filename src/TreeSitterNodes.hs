@@ -12,7 +12,6 @@ import GHC.Generics
 import Data.Map
 import Data.Aeson as Aeson
 import Data.Aeson.Types
-import Data.Maybe
 
 import qualified Data.ByteString.Lazy.Char8 as BSL_Char8
 
@@ -83,6 +82,7 @@ parse_node_types path = do
                   (Nothing, Just fs, Just st) -> return $ Interior (NodeInfo node_type named) fs st Nothing
                   (Nothing, Just fs, Nothing) -> return $ Interior (NodeInfo node_type named) fs Nothing Nothing
           rest = parseAsNodeTypes xs
-      in if (isNothing current) || (isNothing rest)
-         then Nothing
-         else return $ [fromJust current] ++ (fromJust rest)
+      in case (current,rest) of
+        (Nothing, _) -> Nothing
+        (_, Nothing) -> Nothing
+        (Just current_, Just rest_) -> return $ current_ : rest_

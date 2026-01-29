@@ -1,4 +1,4 @@
-{-# LANGUAGE OverloadedStrings, TemplateHaskell, TemplateHaskellQuotes #-}
+{-# LANGUAGE OverloadedStrings, MultilineStrings #-}
 module Template.TypeScriptTemplate
   (import_statement,
    import_all_statement,
@@ -148,10 +148,12 @@ node_type_assertion = T $ "assert(node.type == \'" % text % "\');"
 prop_initialize :: Text -> Text -> Text -> Text
 prop_initialize = inst
   (T $
-   "{\n\
-    \ let r = (new Searcher(node, \"" % text % "\")).searching_next(node.walk());\n\
-    \ if (r != null) { this." % text % " = new " % text % "(r); }\n\
-    \}")
+   """
+   {
+     let r = (new Searcher(node, \"""" % text % """\")).searching_next(node.walk());
+     if (r != null) { this.""" % text % """ = new """ % text % """(r); }
+   }
+   """)
 
 prop_initialize_array :: Text -> Text -> Text -> Text
 prop_initialize_array = inst

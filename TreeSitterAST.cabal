@@ -76,7 +76,7 @@ library
     -- other-extensions:
 
     -- Other library packages from which modules are imported.
-    build-depends:    base ^>=4.20.0.0,
+    build-depends:    base ^>=4.21.0.0,
                       aeson,
                       bytestring >= 0.12.2.0,
                       transformers >= 0.6.1.2,
@@ -106,7 +106,7 @@ executable TreeSitterAST
 
     -- Other library packages from which modules are imported.
     build-depends:
-        base ^>=4.20.0.0,
+        base ^>=4.21.0.0,
         TreeSitterAST,
         transformers >= 0.6.1.2
 
@@ -141,7 +141,7 @@ test-suite TreeSitterAST-test
 
     -- Test dependencies.
     build-depends:
-        base ^>=4.20.0.0,
+        base ^>=4.21.0.0,
         TreeSitterAST,
         HUnit >= 1.6.2.0,
         QuickCheck >= 2.15.0.1,
