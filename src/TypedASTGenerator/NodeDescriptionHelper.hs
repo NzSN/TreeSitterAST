@@ -1,4 +1,7 @@
-module BackendDescription.NodeDescriptionHelper where
+module TypedASTGenerator.NodeDescriptionHelper
+(node_type_ident,
+ node_name_ident
+) where
 
 import Utility
 

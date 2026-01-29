@@ -1,12 +1,12 @@
 {-# LANGUAGE OverloadedStrings, MultilineStrings #-}
-module BackendDescription.NodeDescription (descript, node_type_ident) where
+module TypedASTGenerator.NodeDescription (descript, node_type_ident) where
 
 import qualified TreeSitterNodes as TN
 import qualified Template.Template as TT
 import qualified Template.TypeScriptTemplate as TTS
 import Data.Text.Lazy (pack, Text, unpack)
 import qualified Data.Map as Map
-import BackendDescription.NodeDescriptionHelper
+import TypedASTGenerator.NodeDescriptionHelper
 
 descript :: [TN.Node] -> String
 descript nodes =
@@ -69,7 +69,7 @@ descript nodes =
         (pack $ node_type_ident $ TN.node_type n_info)          -- Class Identifier
         (Just "TS_Node")                                        -- Base Class
         (Just (TT.TArray $ prop_declarations (TN.Leaf n_info))) -- Properties
-        (Just (TT.TArray [constructor (TN.Leaf n_info)]))  -- Constructor
+        (Just (TT.TArray [constructor (TN.Leaf n_info)]))       -- Constructor
     leaf_node _ = undefined
 
     interior_node :: TN.Node -> Text

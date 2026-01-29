@@ -32,7 +32,7 @@ import Template.Template (Template(..), TArray(..), inst)
 import Formatting ((%), commaSep, text, optioned, spaced, formatToString)
 import Formatting.Formatters (build)
 import Data.Text.Lazy (Text, unpack, pack)
-import BackendDescription.NodeDescriptionHelper
+import TypedASTGenerator.NodeDescriptionHelper
 
 import_statement :: Template (TArray Text -> Text -> Text)
 import_statement = T $ "import { " % (commaSep build) % " } from '" % text % "';"
