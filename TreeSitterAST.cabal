@@ -108,7 +108,8 @@ executable TreeSitterAST
     build-depends:
         base ^>=4.21.0.0,
         TreeSitterAST,
-        transformers >= 0.6.1.2
+        transformers >= 0.6.1.2,
+        optparse-applicative
 
     -- Directories containing source files.
     hs-source-dirs:   app
