@@ -1,13 +1,13 @@
 {-# LANGUAGE OverloadedStrings, LambdaCase #-}
-module BackendDescription.NodeProcessorDescription where
+module TypedASTGenerator.NodeProcessorDescription where
 
 import qualified Template.Template as TT
 import qualified Template.TypeScriptTemplate as TTS
 import qualified TreeSitterNodes as TN
 import Data.Text.Lazy (unpack, pack, Text)
 import Template.TypeScriptTemplate (switch_statements)
-import qualified BackendDescription.NodeDescription as BN
-import qualified BackendDescription.NodeDescriptionHelper as BNH
+import qualified TypedASTGenerator.NodeDescription as BN
+import qualified TypedASTGenerator.NodeDescriptionHelper as BNH
 
 descript :: [TN.Node] -> String
 descript nodes =
