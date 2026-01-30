@@ -69,6 +69,7 @@ library
                      TypedASTGenerator.NodeDescription,
                      TypedASTGenerator.NodeDescriptionHelper,
                      ProgBuilder.ProgBuilderDescription,
+                     ProgBuilder.ProgBuilderForECMA,
 
 
     -- Modules included in this library but not exported.

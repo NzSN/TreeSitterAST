@@ -1,14 +1,15 @@
 {-# LANGUAGE OverloadedStrings #-}
 
 module TreeSitterGrammarNodes
-  ( Rule (..),
+  ( Node (..),
     PrecedenceValue (..),
-    Rules,
+    Nodes,
     Grammar (..),
-    parseRuleFromJSON,
+    parseNodeFromJSON,
     parseGrammarFromJSON,
     parseGrammarFromFile,
-    parseRuleFromFile,
+    parseNodeFromFile,
+    isTokenRule,
   )
 where
 
@@ -25,7 +26,7 @@ import GHC.Generics
 data PrecedenceValue
   = NamedPrecedence String
   | NumericPrecedence Int
-  deriving (Show, Eq, Generic)
+  deriving (Show, Eq, Generic, Ord)
 
 instance ToJSON PrecedenceValue where
   toJSON (NamedPrecedence s) = toJSON s
@@ -40,28 +41,44 @@ instance FromJSON PrecedenceValue where
         "Parsing PrecedenceValue failed"
         (typeMismatch "String or Number" v)
 
--- | A grammar rule.
-data Rule
-  = Seq {members :: [Rule]}
-  | Choice {members :: [Rule]}
-  | Repeat {content :: Rule}
-  | Repeat1 {content :: Rule}
+-- | A grammar node.
+data Node
+  = Seq {members :: [Node]}
+  | Choice {members :: [Node]}
+  | Repeat {content :: Node}
+  | Repeat1 {content :: Node}
   | Symbol {name :: String}
-  | StringLit {value :: String} -- renamed to avoid conflict with built-in String
+  | StringLiteral {value :: String}
   | Pattern {value :: String}
   | Blank
-  | Field {fieldName :: String, content :: Rule}
-  | Alias {content :: Rule, named :: Bool, aliasValue :: String}
-  | Token {content :: Rule}
-  | ImmediateToken {content :: Rule}
-  | Prec {precedence :: PrecedenceValue, content :: Rule}
-  | PrecLeft {precedence :: PrecedenceValue, content :: Rule}
-  | PrecRight {precedence :: PrecedenceValue, content :: Rule}
-  | PrecDynamic {precedence :: PrecedenceValue, content :: Rule}
-  | Reserved {content :: Rule, contextName :: String}
-  deriving (Show, Eq, Generic)
+  | Field {fieldName :: String, content :: Node}
+  | Alias {content :: Node, named :: Bool, aliasValue :: String}
+  | Token {content :: Node}
+  | ImmediateToken {content :: Node}
+  | Prec {precedence :: PrecedenceValue, content :: Node}
+  | PrecLeft {precedence :: PrecedenceValue, content :: Node}
+  | PrecRight {precedence :: PrecedenceValue, content :: Node}
+  | PrecDynamic {precedence :: PrecedenceValue, content :: Node}
+  | Reserved {content :: Node, contextName :: String}
+  | Empty
+  deriving (Show, Eq, Generic, Ord)
 
-instance ToJSON Rule where
+isTokenRule :: Node -> Bool
+isTokenRule (StringLiteral _) = True
+isTokenRule (Pattern _) = True
+isTokenRule Blank = True
+isTokenRule (Token _) = True
+isTokenRule (ImmediateToken _) = True
+isTokenRule (Alias content _ _) = isTokenRule content
+isTokenRule (Prec _ content) = isTokenRule content
+isTokenRule (PrecLeft _ content) = isTokenRule content
+isTokenRule (PrecRight _ content) = isTokenRule content
+isTokenRule (PrecDynamic _ content) = isTokenRule content
+isTokenRule (Reserved content _) = isTokenRule content
+-- Symbol could be token or non-token; assume non-token (interior)
+isTokenRule _ = False
+
+instance ToJSON Node where
   toJSON (Seq members) =
     object
       [ "type" .= ("SEQ" :: String),
@@ -87,7 +104,7 @@ instance ToJSON Rule where
       [ "type" .= ("SYMBOL" :: String),
         "name" .= name
       ]
-  toJSON (StringLit value) =
+  toJSON (StringLiteral value) =
     object
       [ "type" .= ("STRING" :: String),
         "value" .= value
@@ -155,7 +172,7 @@ instance ToJSON Rule where
         "context_name" .= contextName
       ]
 
-instance FromJSON Rule where
+instance FromJSON Node where
   parseJSON (Object v) = do
     typ <- v .: "type"
     case typ of
@@ -164,7 +181,7 @@ instance FromJSON Rule where
       "REPEAT" -> Repeat <$> v .: "content"
       "REPEAT1" -> Repeat1 <$> v .: "content"
       "SYMBOL" -> Symbol <$> v .: "name"
-      "STRING" -> StringLit <$> v .: "value"
+      "STRING" -> StringLiteral <$> v .: "value"
       "PATTERN" -> Pattern <$> v .: "value"
       "BLANK" -> return Blank
       "FIELD" -> Field <$> v .: "name" <*> v .: "content"
@@ -176,28 +193,28 @@ instance FromJSON Rule where
       "PREC_RIGHT" -> PrecRight <$> v .: "value" <*> v .: "content"
       "PREC_DYNAMIC" -> PrecDynamic <$> v .: "value" <*> v .: "content"
       "RESERVED" -> Reserved <$> v .: "content" <*> v .: "context_name"
-      unknown -> fail $ "Unknown rule type: " ++ unknown
+      unknown -> fail $ "Unknown node type: " ++ unknown
   parseJSON invalid =
     prependFailure
-      "Parsing Rule failed"
+      "Parsing Node failed"
       (typeMismatch "Object" invalid)
 
--- | A map from rule name to rule definition.
-type Rules = Map String Rule
+-- | A map from node name to node definition.
+type Nodes = Map String Node
 
 -- | Full grammar definition.
 data Grammar = Grammar
   { grammarName :: String,
     grammarWord :: Maybe String,
-    grammarRules :: Rules
+    grammarNodes :: Nodes
   }
   deriving (Show, Eq, Generic)
 
 instance ToJSON Grammar where
-  toJSON (Grammar name word rules) =
+  toJSON (Grammar name word nodes) =
     object $
       [ "name" .= name,
-        "rules" .= rules
+        "rules" .= nodes
       ]
         ++ maybe [] (\w -> ["word" .= w]) word
 
@@ -205,16 +222,16 @@ instance FromJSON Grammar where
   parseJSON (Object v) = do
     name <- v .: "name"
     word <- v .:? "word"
-    rules <- v .: "rules"
-    return $ Grammar name word rules
+    nodes <- v .: "rules"
+    return $ Grammar name word nodes
   parseJSON invalid =
     prependFailure
       "Parsing Grammar failed"
       (typeMismatch "Object" invalid)
 
--- | Parse a single rule from a JSON string.
-parseRuleFromJSON :: String -> Maybe Rule
-parseRuleFromJSON jsonStr = decode (BSL.pack jsonStr)
+-- | Parse a single node from a JSON string.
+parseNodeFromJSON :: String -> Maybe Node
+parseNodeFromJSON jsonStr = decode (BSL.pack jsonStr)
 
 -- | Parse a full grammar from a JSON string.
 parseGrammarFromJSON :: String -> Maybe Grammar
@@ -228,10 +245,10 @@ parseGrammarFromFile path = do
     Nothing -> MaybeT $ return Nothing
     Just grammar -> return grammar
 
--- | Parse a single rule from a file.
-parseRuleFromFile :: String -> MaybeT IO Rule
-parseRuleFromFile path = do
+-- | Parse a single node from a file.
+parseNodeFromFile :: String -> MaybeT IO Node
+parseNodeFromFile path = do
   content <- lift $ readFile path
   case decode (BSL.pack content) of
     Nothing -> MaybeT $ return Nothing
-    Just rule -> return rule
+    Just node -> return node
