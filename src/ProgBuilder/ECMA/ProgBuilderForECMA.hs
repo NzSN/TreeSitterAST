@@ -1,22 +1,24 @@
+{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE MultilineStrings #-}
 {-# LANGUAGE OverloadedStrings #-}
 
-module ProgBuilder.ProgBuilderForECMA where
+module ProgBuilder.ECMA.ProgBuilderForECMA where
 
 import Data.List as L
 import Data.Map qualified as Map
 import Data.Text.Lazy (Text, pack, unpack)
 import Debug.Trace (trace)
 import ProgBuilder.ProgBuilderDescription
-  ( Property (..),
-    PropertyVar (..),
-    propsOfNode,
+  ( Interior (..),
+    Leaf (..),
+    fromTSGN,
   )
 import Template.Template qualified as TT
 import Template.TypeScriptTemplate qualified as TTS
 import TreeSitterGrammarNodes (isTokenRule)
 import TreeSitterGrammarNodes qualified as TSGN
 import TypedASTGenerator.NodeDescriptionHelper
+import Utility (upper_the_first_char)
 
 descript :: TSGN.Grammar -> String
 descript grammar =
@@ -69,7 +71,7 @@ prologue =
 build :: String -> TSGN.Node -> String
 build name rule =
   let className = pack $ node_type_ident name
-      fields = propsOfNode rule
+      fields = fromTSGN rule
       isLeaf = isTokenRule rule
       (baseClass, constructorDef, props) =
         if isLeaf
@@ -95,24 +97,37 @@ build name rule =
         (TT.TArray [TT.inst TTS.parameter_declare "value" "string"])
         (TT.TArray [TT.inst TTS.function_call "super" (Just $ TT.TArray [TT.inst TTS.var_ref "value"])])
 
-    interiorConstructor :: [Property] -> Text
+    interiorConstructor :: [Interior] -> Text
     interiorConstructor fields' =
       TT.inst
         TTS.const_declare
         (TT.TArray [])
-        (TT.TArray $ interiorPrologueStmts ++ map fieldToConstructorStmt fields')
+        ( TT.TArray $
+            interiorPrologueStmts
+              ++ map
+                fieldToConstructorStmt
+                ( flip filter fields' $
+                    \case
+                      (Leaf (InteriorLiteral _)) -> False
+                      _ -> True
+                )
+        )
 
     interiorPrologueStmts :: [Text]
     interiorPrologueStmts =
       [TT.inst TTS.function_call "super" (Just $ TT.TArray [TT.inst TTS.var_ref "NodeType.Interior"])]
 
-fieldToPropDecl :: Property -> Text
+type FieldIdentText = Text
+
+type FieldTypeStr = String
+
+fieldToPropDecl :: Interior -> Text
 fieldToPropDecl x
-  | (Property literal@(PropertyLiteral _)) <- x =
-      let prop_literal = propLiteral "__i" literal
+  | (Leaf ref@(InteriorRef _)) <- x =
+      let prop_literal = propLiteral "__i" ref
           typeStr = pack $ snd prop_literal ++ " | undefined;"
        in TT.inst TTS.public_qualifier $ TT.inst TTS.parameter_declare (fst prop_literal) typeStr
-  | (Repeat (Property literal@(PropertyLiteral _))) <- x =
+  | (Repeat (Leaf literal@(InteriorLiteral _))) <- x =
       let prop_literal = propLiteral "__array_i" literal
           typeStr = pack $ snd prop_literal ++ "[] = [];"
        in TT.inst TTS.public_qualifier $ TT.inst TTS.parameter_declare (fst prop_literal) typeStr
@@ -120,8 +135,9 @@ fieldToPropDecl x
   | (Repeat (Choice _)) <- x = ""
   | (Choice _) <- x = ""
   where
-    propLiteral :: String -> PropertyVar -> (Text, String)
-    propLiteral qualifier (PropertyLiteral n) = (++ qualifier) . prop_name
+    propLiteral :: String -> Leaf -> (FieldIdentText, FieldTypeStr)
+    propLiteral _ (InteriorLiteral _) = error "Literal should not declared as field"
+    propLiteral qualifier (InteriorRef n) = (pack (upper_the_first_char n ++ qualifier), n)
 
 baseType :: TSGN.Node -> String
 baseType (TSGN.Symbol symName) = node_type_ident symName
@@ -142,16 +158,14 @@ baseType (TSGN.Alias content _ _) = baseType content
 baseType (TSGN.Reserved content _) = baseType content
 baseType _ = "any"
 
-fieldToConstructorStmt :: Property -> Text
+fieldToConstructorStmt :: Interior -> Text
 fieldToConstructorStmt x
-  | (Property (PropertyLiteral _)) <- x =
-      case p_type of
-        TSGN.Symbol _ -> "{ /* Non-Array-field Initialization */ }\n"
-        _ -> pack ""
-  | (Repeat (Property (PropertyLiteral _))) <- x =
-      case p_type of
-        TSGN.Symbol _ -> "{ /* Array-field Initialization */ }\n"
-        _ -> pack ""
+  | (Leaf (InteriorLiteral _)) <- x =
+      error "Construct field for Literal Interior is not expected"
+  | (Leaf (InteriorRef _)) <- x =
+      "{ /* Initialization Ref field */ }"
+  | (Repeat (Leaf (InteriorLiteral _))) <- x =
+      "{ /* Array-field Initialization */ }\n"
   | (Repeat (Repeat prop)) <- x = fieldToConstructorStmt prop
   | (Repeat (Choice _)) <- x = pack ""
   | (Choice _) <- x = pack ""

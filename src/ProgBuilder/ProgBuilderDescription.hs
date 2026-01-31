@@ -1,59 +1,55 @@
 {-# LANGUAGE MultilineStrings #-}
-{-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE PatternGuards #-}
 
 module ProgBuilder.ProgBuilderDescription
-  ( Property (..),
-    PropertyVar (..),
-    propsOfNode,
+  ( Interior (..),
+    Leaf (..),
+    fromTSGN,
   )
 where
 
 import TreeSitterGrammarNodes qualified as TSGN
 
--- Property Literal suppose to correspond to
+-- Interior Literal suppose to correspond to
 -- leaf nodes.
-data PropertyVar
-  = PropertyLiteral { prop_name :: String }
-    | PropertyRef { prop_ref :: String }
-    | PropertyField {
-        prop_field_name :: String,
-        prop_field_type :: String }
+data Leaf
+  = InteriorLiteral {prop_name :: String}
+  | InteriorRef     {prop_ref :: String}
   deriving (Show, Eq, Ord)
 
-data Property
-  = Property {eval :: PropertyVar}
-  | Repeat {prop :: Property}
-  | Choice {props :: [Property]}
+data Interior
+  = Leaf    {eval :: Leaf}
+  | Seq     {props_seq :: [Interior]}
+  | Repeat  {prop :: Interior}
+  | Repeat1 {prop_repeat1 :: Interior}
+  | Choice  {props :: [Interior]}
+  | Field   {field_name :: String,
+              named_prop :: Interior}
+  | Empty
   deriving (Eq, Ord, Show)
 
-propsOfNode :: TSGN.Node -> [Property]
-propsOfNode (TSGN.Seq members) =
-  concatMap propsOfNode members
-propsOfNode (TSGN.Choice ns) = [Choice (concatMap propsOfNode ns)]
-propsOfNode n
-  | (TSGN.Repeat content) <- n = withRepeat content
-  | (TSGN.Repeat1 content) <- n = withRepeat content
-  where
-    withRepeat :: TSGN.Node -> [Property]
-    withRepeat node =
-      [ Repeat
-          ( case propsOfNode node of
-              -- PRECONDITION: Repeat must has only one sub-rule.
-              [] -> error "Invalid Syntax"
-              (Repeat _) : _ -> error "Nested Repeat is not expected"
-              p@(Property _) : _ -> p
-              p@(Choice _) : _ -> p
-          )
-      ]
-propsOfNode (TSGN.Field field_name field_type) = [Property (PropertyField field_name field_type)]
-propsOfNode (TSGN.Symbol content) = [Property (PropertyLiteral content)]
-propsOfNode (TSGN.Prec _ content) = propsOfNode content
-propsOfNode (TSGN.PrecLeft _ content) = propsOfNode content
-propsOfNode (TSGN.PrecRight _ content) = propsOfNode content
-propsOfNode (TSGN.PrecDynamic _ content) = propsOfNode content
-propsOfNode (TSGN.Token content) = propsOfNode content
-propsOfNode (TSGN.ImmediateToken content) = propsOfNode content
-propsOfNode (TSGN.Alias content _ _) = propsOfNode content
-propsOfNode (TSGN.Reserved content _) = propsOfNode content
-propsOfNode _ = []
+fromTSGN :: TSGN.Node -> Interior
+fromTSGN (TSGN.Seq members) =
+  Seq $ map fromTSGN members
+fromTSGN (TSGN.Choice ns) = Choice (map fromTSGN ns)
+fromTSGN (TSGN.Repeat n) = Repeat $
+                                 case fromTSGN n of
+                                   (Repeat n_) -> n_
+                                   (Repeat1 n_) -> n_
+                                   p -> p
+fromTSGN (TSGN.Repeat1 n) = Repeat1 $
+                            case fromTSGN n of
+                              (Repeat n_)-> n_
+                              (Repeat1 n_) -> n_
+                              p -> p
+fromTSGN (TSGN.StringLiteral str) = Leaf $ InteriorLiteral str
+fromTSGN (TSGN.Field field_name field_type) = Field field_name $ fromTSGN field_type
+fromTSGN (TSGN.Symbol content) = Leaf (InteriorRef content)
+fromTSGN (TSGN.Prec _ content) = fromTSGN content
+fromTSGN (TSGN.PrecLeft _ content) = fromTSGN content
+fromTSGN (TSGN.PrecRight _ content) = fromTSGN content
+fromTSGN (TSGN.PrecDynamic _ content) = fromTSGN content
+fromTSGN (TSGN.Token content) = fromTSGN content
+fromTSGN (TSGN.ImmediateToken content) = fromTSGN content
+fromTSGN (TSGN.Alias content _ _) = fromTSGN content
+fromTSGN (TSGN.Reserved content _) = fromTSGN content
+fromTSGN _ = Empty

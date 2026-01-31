@@ -4,7 +4,7 @@ module Main where
 
 import Args (Mode (..), parseArgs)
 import Control.Monad.Trans.Maybe
-import ProgBuilder.ProgBuilderForECMA qualified as PB
+import ProgBuilder.ECMA.ProgBuilderForECMA qualified as PB
 import TreeSitterGrammarNodes qualified as TSGN
 import TreeSitterNodes qualified as TS
 import TypedASTGenerator.NodeDescription qualified as BN
