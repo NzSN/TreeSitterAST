@@ -148,7 +148,7 @@ evalFieldType f
     collapseSumType :: Field -> T.Text
     collapseSumType (SumField _ []) = T.pack "undefined"
     collapseSumType (SumField _ types) =
-      T.pack $ L.intercalate " | " $ map T.unpack types
+      T.pack $ L.intercalate " | " $ map ((++ "_T") . upper_the_first_char . T.unpack) types
     -- Unreachable
     collapseSumType _ = undefined
 
@@ -178,7 +178,7 @@ propFromTSGN x
 
   where
     collapseFieldType :: [Field] -> [T.Text]
-    collapseFieldType = map evalFieldType . filter
+    collapseFieldType = map field_type . filter
       (\case { EmptyField -> False; _ -> True })
 
 mergeDuplicates :: [Field] -> [Field]
