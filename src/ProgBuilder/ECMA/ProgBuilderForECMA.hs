@@ -116,6 +116,17 @@ eval f
   | EmptyField <- f = ""
   where evaluate field = T.concat [evalFieldName field, " : " , evalFieldType field]
 
+mergeFieldType :: Field -> Field -> Field
+mergeFieldType f0 f1 = case (f0, f1) of
+    (Field name0 ty0, Field name1 ty1) | name0 == name1 ->
+        SumField name0 [ty0, ty1]
+    (Field name0 ty0, SumField name1 tys1) | name0 == name1 ->
+        SumField name0 (ty0 : tys1)
+    (SumField name0 tys0, Field name1 ty1) | name0 == name1 ->
+        SumField name0 (tys0 ++ [ty1])
+    (SumField name0 tys0, SumField name1 tys1) | name0 == name1 ->
+        SumField name0 (tys0 ++ tys1)
+    _ -> EmptyField
 
 evalFieldName :: Field -> T.Text
 evalFieldName f
@@ -167,10 +178,32 @@ propFromTSGN x
     collapseFieldType = map evalFieldType . filter
       (\case { EmptyField -> False; _ -> True })
 
+mergeDuplicates :: [Field] -> [Field]
+mergeDuplicates fields = Map.elems $ L.foldl' insertField Map.empty (filter (not . isEmpty) fields)
+  where
+    isEmpty :: Field -> Bool
+    isEmpty EmptyField = True
+    isEmpty _ = False
+
+    insertField :: Map.Map T.Text Field -> Field -> Map.Map T.Text Field
+    insertField acc field = case field of
+      EmptyField -> acc
+      _ -> Map.alter (combine field) (fieldName field) acc
+
+    fieldName :: Field -> T.Text
+    fieldName (Field name _) = name
+    fieldName (SumField name _) = name
+    fieldName EmptyField = ""  -- Should not happen due to case above
+
+    combine :: Field -> Maybe Field -> Maybe Field
+    combine newField Nothing = Just newField
+    combine newField (Just oldField) =
+      case mergeFieldType oldField newField of
+        EmptyField -> Nothing  -- Should not happen for same field names
+        merged -> Just merged
+
 collapse' :: [Field] -> [T.Text]
-collapse' (EmptyField:_) = []
-collapse' (x:xs) = T.concat [eval x, ";\n"] : collapse' xs
-collapse' [] = []
+collapse' fields = map (\f -> T.concat [eval f, ";\n"]) (mergeDuplicates fields)
 
 baseType :: TSGN.Node -> T.Text
 baseType (TSGN.Symbol symName) = T.pack $ node_type_ident $ T.unpack symName
