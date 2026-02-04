@@ -206,24 +206,36 @@ type Nodes = Map String Node
 data Grammar = Grammar
   { grammarName :: Text,
     grammarWord :: Maybe String,
-    grammarNodes :: Nodes
+    grammarNodes :: Nodes,
+    grammarExternals :: Maybe [Node],
+    grammarInline :: Maybe [Node],
+    grammarSupertypes :: Maybe [Node],
+    grammarReserved :: Maybe (Map Text [Node])
   }
   deriving (Show, Eq, Generic)
 
 instance ToJSON Grammar where
-  toJSON (Grammar name word nodes) =
+  toJSON (Grammar name word nodes externals inline supertypes reserved) =
     object $
       [ "name" .= name,
         "rules" .= nodes
       ]
         ++ maybe [] (\w -> ["word" .= w]) word
+        ++ maybe [] (\e -> ["externals" .= e]) externals
+        ++ maybe [] (\i -> ["inline" .= map (\n -> case n of Symbol name -> name; _ -> error "non-symbol in inline") i]) inline
+        ++ maybe [] (\s -> ["supertypes" .= map (\n -> case n of Symbol name -> name; _ -> error "non-symbol in supertypes") s]) supertypes
+        ++ maybe [] (\r -> ["reserved" .= r]) reserved
 
 instance FromJSON Grammar where
   parseJSON (Object v) = do
     name <- v .: "name"
     word <- v .:? "word"
     nodes <- v .: "rules"
-    return $ Grammar name word nodes
+    externals <- v .:? "externals"
+    inline <- fmap (fmap (map Symbol)) (v .:? "inline")
+    supertypes <- fmap (fmap (map Symbol)) (v .:? "supertypes")
+    reserved <- v .:? "reserved"
+    return $ Grammar name word nodes externals inline supertypes reserved
   parseJSON invalid =
     prependFailure
       "Parsing Grammar failed"
