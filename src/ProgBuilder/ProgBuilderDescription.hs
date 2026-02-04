@@ -9,9 +9,10 @@ import qualified Data.Text.Lazy as T
 import TreeSitterGrammarNodes qualified as TSGN
 
 data Property =
-  StrProp    {str_value :: T.Text} |
-  SymbolProp {p_type :: T.Text}    |
+  StrProp    {str_value :: T.Text}                     |
+  SymbolProp {p_type :: T.Text}                        |
   NamedProp  {p_name :: T.Text, p_types :: [Property]}
+
 propsOfNode :: TSGN.Node -> [Property]
 propsOfNode x
   | (TSGN.Seq ns)           <- x = concatMap propsOfNode ns
@@ -28,4 +29,8 @@ propsOfNode x
   | (TSGN.PrecRight _ n)    <- x = propsOfNode n
   | (TSGN.PrecDynamic _ n)  <- x = propsOfNode n
   | (TSGN.Reserved n _)     <- x = propsOfNode n
+  -- Named alias
+  | (TSGN.Alias n True _)   <- x = propsOfNode n
+  -- Literal alias
+  | (TSGN.Alias n False _)  <- x = propsOfNode n
   | _                       <- x = []
