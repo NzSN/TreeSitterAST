@@ -1,5 +1,6 @@
 {-# LANGUAGE MultilineStrings #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE KindSignatures #-}
 
 module ProgBuilder.ECMA.ProgBuilderForECMA where
 
@@ -18,6 +19,10 @@ import TreeSitterGrammarNodes (isLeaf)
 import TreeSitterGrammarNodes qualified as TSGN
 import TypedASTGenerator.NodeDescriptionHelper
 import Utility (upper_the_first_char)
+
+import Data.Kind
+
+newtype SS (ctx :: Type -> Type) (a :: Int) = SS [Int]
 
 descript :: TSGN.Grammar -> String
 descript grammar =
@@ -44,10 +49,10 @@ prologue =
   export class SyntaticLeaf extends SyntaticNode {
       value_: string;
       constructor(value: string) {
+          super();
           this.value_ = value;
       }
       evaluate(): string {
-          super();
           return this.value_;
       }
   }
@@ -74,8 +79,8 @@ build name rule =
               interiorConstructor fields,
               Just $ TT.TArray $ collapse' $ evalState (propFromTSGNs fields) 0)
       methods = Just $ TT.TArray [constructorDef]
-   in TT.inst TTS.export_qualifier $
-          TT.inst TTS.class_declare className (Just baseClass) props methods
+   in T.concat [TT.inst TTS.export_qualifier $
+        TT.inst TTS.class_declare className (Just baseClass) props methods, "\n"]
   where
     leafConstructor :: T.Text
     leafConstructor =
@@ -100,23 +105,39 @@ build name rule =
 
 data Field =
   Field { field_name :: T.Text, field_type :: T.Text } |
+  SumField { field_name :: T.Text, field_types :: [T.Text] } |
   EmptyField
   deriving (Show)
 
 eval :: Field -> T.Text
 eval f
-  | (Field f_name f_type) <- f = T.concat [f_name, " : " ,f_type]
+  | field@(Field _ _) <- f = evaluate field
+  | field@(SumField _ _) <- f = evaluate field
   | EmptyField <- f = ""
+  where evaluate field = T.concat [evalFieldName field, " : " , evalFieldType field]
+
 
 evalFieldName :: Field -> T.Text
 evalFieldName f
   | (Field f_name _) <- f = T.concat [f_name, "__i"]
+  | (SumField f_name _) <- f = T.concat [f_name, "__i"]
   | EmptyField <- f = ""
+
 
 evalFieldType :: Field -> T.Text
 evalFieldType f
-  | (Field _ f_type) <- f = T.pack $ upper_the_first_char (T.unpack f_type) ++ "_T"
+  | (Field _ f_type) <- f =
+      T.pack $ upper_the_first_char (T.unpack f_type) ++ "_T"
+   | field@(SumField _ _) <- f = collapseSumType field
   | EmptyField <- f = ""
+  where
+    collapseSumType :: Field -> T.Text
+    collapseSumType (SumField _ []) = T.pack "undefined"
+    collapseSumType (SumField _ types) =
+      T.pack $ L.intercalate " | " $ map T.unpack types
+    -- Unreachable
+    collapseSumType _ = undefined
+
 
 propFromTSGNs :: [Property] -> State Int [Field]
 propFromTSGNs (x:xs) = do
@@ -125,25 +146,26 @@ propFromTSGNs (x:xs) = do
   return $ field : evalState (propFromTSGNs xs) next
 propFromTSGNs [] = return []
 
-
 propFromTSGN :: Property -> State Int Field
 propFromTSGN x
   | (SymbolProp p_type) <- x = return $ Field p_type p_type
   | (StrProp _) <- x = return EmptyField
   | (NamedProp p_name p_types) <- x =
-      let prop_literal = T.concat [p_name, "__i"]
-          -- Igonore the inner field type hence
-          -- collapse type of fields only.
-          eval_type_str = get >>= \s -> return $ collapseFieldType (evalState (propFromTSGNs p_types) s)
+      -- Igonore the inner field type hence
+      -- collapse type of fields only.
+      let eval_type_str = get >>=
+            \s -> return $
+                    collapseFieldType (evalState (propFromTSGNs p_types) s)
       in do
         ident <- get
         let (typestr,next) = runState eval_type_str ident
         put next
-        return $ Field prop_literal typestr
+        return $ SumField p_name typestr
 
-collapseFieldType :: [Field] -> T.Text
-collapseFieldType fs = foldl type_plus "" $ map evalFieldType fs
-  where type_plus acc t = T.concat [acc, t, " | "]
+  where
+    collapseFieldType :: [Field] -> [T.Text]
+    collapseFieldType = map evalFieldType . filter
+      (\case { EmptyField -> False; _ -> True })
 
 collapse' :: [Field] -> [T.Text]
 collapse' (EmptyField:_) = []
