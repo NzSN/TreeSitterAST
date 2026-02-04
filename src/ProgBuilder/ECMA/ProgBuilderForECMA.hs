@@ -119,14 +119,17 @@ eval f
 mergeFieldType :: Field -> Field -> Field
 mergeFieldType f0 f1 = case (f0, f1) of
     (Field name0 ty0, Field name1 ty1) | name0 == name1 ->
-        SumField name0 [ty0, ty1]
+        SumField name0 $ dedupTypes [ty0, ty1]
     (Field name0 ty0, SumField name1 tys1) | name0 == name1 ->
-        SumField name0 (ty0 : tys1)
+        SumField name0 $ dedupTypes (ty0 : tys1)
     (SumField name0 tys0, Field name1 ty1) | name0 == name1 ->
-        SumField name0 (tys0 ++ [ty1])
+        SumField name0 $ dedupTypes (tys0 ++ [ty1])
     (SumField name0 tys0, SumField name1 tys1) | name0 == name1 ->
-        SumField name0 (tys0 ++ tys1)
+        SumField name0 $ dedupTypes (tys0 ++ tys1)
     _ -> EmptyField
+  where
+    dedupTypes :: [T.Text] -> [T.Text]
+    dedupTypes = L.nub
 
 evalFieldName :: Field -> T.Text
 evalFieldName f
