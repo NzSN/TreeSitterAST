@@ -4,12 +4,14 @@ module ProgBuilder.ProgBuilderDescription
  propsOfNode,
 ) where
 
+import qualified Data.Text.Lazy as T
+
 import TreeSitterGrammarNodes qualified as TSGN
 
 data Property =
-  SymbolProp      {p_type :: String} |
-  StrProp   {str_value :: String} |
-  NamedProp {p_name :: String, p_types :: [Property]}
+  StrProp    {str_value :: T.Text} |
+  SymbolProp {p_type :: T.Text}    |
+  NamedProp  {p_name :: T.Text, p_types :: [Property]}
 propsOfNode :: TSGN.Node -> [Property]
 propsOfNode x
   | (TSGN.Seq ns)           <- x = concatMap propsOfNode ns
