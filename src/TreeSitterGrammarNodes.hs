@@ -5,9 +5,9 @@ module TreeSitterGrammarNodes
     PrecedenceValue (..),
     Nodes,
     Grammar (..),
-    parseNodeFromJSON,
     parseGrammarFromJSON,
     parseGrammarFromFile,
+    parseNodeFromJSON,
     parseNodeFromFile,
     isLeaf,
   )
@@ -17,14 +17,14 @@ import Control.Monad.Trans.Class
 import Control.Monad.Trans.Maybe
 import Data.Aeson
 import Data.Aeson.Types
-import Data.ByteString.Lazy.Char8 qualified as BSL
 import Data.Map (Map)
-import Data.Text (unpack)
+import Data.Text.Lazy (Text, fromStrict)
+import qualified Data.ByteString.Lazy.Char8 as BS
 import GHC.Generics
 
 -- | Precedence value can be either a named precedence (string) or numeric precedence (int).
 data PrecedenceValue
-  = NamedPrecedence String
+  = NamedPrecedence Text
   | NumericPrecedence Int
   deriving (Show, Eq, Generic, Ord)
 
@@ -34,7 +34,7 @@ instance ToJSON PrecedenceValue where
 
 instance FromJSON PrecedenceValue where
   parseJSON v = case v of
-    String s -> return $ NamedPrecedence (unpack s)
+    String s -> return $ NamedPrecedence $ fromStrict s
     Number n -> return $ NumericPrecedence (floor n)
     _ ->
       prependFailure
@@ -47,19 +47,19 @@ data Node
   | Choice         {members :: [Node]}
   | Repeat         {content :: Node}
   | Repeat1        {content :: Node}
-  | Symbol         {name :: String}
-  | StringLiteral  {value :: String}
-  | Pattern        {value :: String}
+  | Symbol         {name :: Text}
+  | StringLiteral  {value :: Text}
+  | Pattern        {value :: Text}
   | Blank
-  | Field          {fieldName :: String, content :: Node}
-  | Alias          {content :: Node, named :: Bool, aliasValue :: String}
+  | Field          {fieldName :: Text, content :: Node}
+  | Alias          {content :: Node, named :: Bool, aliasValue :: Text}
   | Token          {content :: Node}
   | ImmediateToken {content :: Node}
   | Prec           {precedence :: PrecedenceValue, content :: Node}
   | PrecLeft       {precedence :: PrecedenceValue, content :: Node}
   | PrecRight      {precedence :: PrecedenceValue, content :: Node}
   | PrecDynamic    {precedence :: PrecedenceValue, content :: Node}
-  | Reserved       {content :: Node, contextName :: String}
+  | Reserved       {content :: Node, contextName :: Text}
   | Empty
   deriving (Show, Eq, Generic, Ord)
 
@@ -79,95 +79,95 @@ isLeaf (Reserved content _) = isLeaf content
 isLeaf _ = False
 
 instance ToJSON Node where
+  toJSON Empty = Null
   toJSON (Seq members) =
     object
-      [ "type" .= ("SEQ" :: String),
+      [ "type" .= ("SEQ" :: Text),
         "members" .= members
       ]
   toJSON (Choice members) =
     object
-      [ "type" .= ("CHOICE" :: String),
+      [ "type" .= ("CHOICE" :: Text),
         "members" .= members
       ]
   toJSON (Repeat content) =
     object
-      [ "type" .= ("REPEAT" :: String),
+      [ "type" .= ("REPEAT" :: Text),
         "content" .= content
       ]
   toJSON (Repeat1 content) =
     object
-      [ "type" .= ("REPEAT1" :: String),
+      [ "type" .= ("REPEAT1" :: Text),
         "content" .= content
       ]
   toJSON (Symbol name) =
     object
-      [ "type" .= ("SYMBOL" :: String),
+      [ "type" .= ("SYMBOL" :: Text),
         "name" .= name
       ]
   toJSON (StringLiteral value) =
     object
-      [ "type" .= ("STRING" :: String),
+      [ "type" .= ("STRING" :: Text),
         "value" .= value
       ]
   toJSON (Pattern value) =
     object
-      [ "type" .= ("PATTERN" :: String),
+      [ "type" .= ("PATTERN" :: Text),
         "value" .= value
       ]
   toJSON Blank =
     object
-      [ "type" .= ("BLANK" :: String)
+      [ "type" .= ("BLANK" :: Text)
       ]
   toJSON (Field fieldName content) =
     object
-      [ "type" .= ("FIELD" :: String),
+      [ "type" .= ("FIELD" :: Text),
         "name" .= fieldName,
         "content" .= content
       ]
   toJSON (Alias content named aliasValue) =
     object
-      [ "type" .= ("ALIAS" :: String),
+      [ "type" .= ("ALIAS" :: Text),
         "content" .= content,
         "named" .= named,
         "value" .= aliasValue
       ]
   toJSON (Token content) =
-    object
-      [ "type" .= ("TOKEN" :: String),
+    object [ "type" .= ("TOKEN" :: Text),
         "content" .= content
       ]
   toJSON (ImmediateToken content) =
     object
-      [ "type" .= ("IMMEDIATE_TOKEN" :: String),
+      [ "type" .= ("IMMEDIATE_TOKEN" :: Text),
         "content" .= content
       ]
   toJSON (Prec precedence content) =
     object
-      [ "type" .= ("PREC" :: String),
+      [ "type" .= ("PREC" :: Text),
         "value" .= precedence,
         "content" .= content
       ]
   toJSON (PrecLeft precedence content) =
     object
-      [ "type" .= ("PREC_LEFT" :: String),
+      [ "type" .= ("PREC_LEFT" :: Text),
         "value" .= precedence,
         "content" .= content
       ]
   toJSON (PrecRight precedence content) =
     object
-      [ "type" .= ("PREC_RIGHT" :: String),
+      [ "type" .= ("PREC_RIGHT" :: Text),
         "value" .= precedence,
         "content" .= content
       ]
   toJSON (PrecDynamic precedence content) =
     object
-      [ "type" .= ("PREC_DYNAMIC" :: String),
+      [ "type" .= ("PREC_DYNAMIC" :: Text),
         "value" .= precedence,
         "content" .= content
       ]
   toJSON (Reserved content contextName) =
     object
-      [ "type" .= ("RESERVED" :: String),
+      [ "type" .= ("RESERVED" :: Text),
         "content" .= content,
         "context_name" .= contextName
       ]
@@ -204,7 +204,7 @@ type Nodes = Map String Node
 
 -- | Full grammar definition.
 data Grammar = Grammar
-  { grammarName :: String,
+  { grammarName :: Text,
     grammarWord :: Maybe String,
     grammarNodes :: Nodes
   }
@@ -229,26 +229,26 @@ instance FromJSON Grammar where
       "Parsing Grammar failed"
       (typeMismatch "Object" invalid)
 
--- | Parse a single node from a JSON string.
-parseNodeFromJSON :: String -> Maybe Node
-parseNodeFromJSON jsonStr = decode (BSL.pack jsonStr)
-
 -- | Parse a full grammar from a JSON string.
-parseGrammarFromJSON :: String -> Maybe Grammar
-parseGrammarFromJSON jsonStr = decode (BSL.pack jsonStr)
+parseGrammarFromJSON :: BS.ByteString -> Maybe Grammar
+parseGrammarFromJSON = decode
 
 -- | Parse a grammar from a file.
 parseGrammarFromFile :: String -> MaybeT IO Grammar
 parseGrammarFromFile path = do
-  content <- lift $ readFile path
-  case decode (BSL.pack content) of
+  content <- lift $ BS.readFile path
+  case decode content of
     Nothing -> MaybeT $ return Nothing
     Just grammar -> return grammar
+
+-- | Parse a single node from a JSON string.
+parseNodeFromJSON :: String -> Maybe Node
+parseNodeFromJSON jsonStr = decode $ BS.pack jsonStr
 
 -- | Parse a single node from a file.
 parseNodeFromFile :: String -> MaybeT IO Node
 parseNodeFromFile path = do
   content <- lift $ readFile path
-  case decode (BSL.pack content) of
+  case decode (BS.pack content) of
     Nothing -> MaybeT $ return Nothing
     Just node -> return node

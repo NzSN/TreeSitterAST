@@ -7,7 +7,7 @@ import Control.Monad.Trans.State
 
 import Data.List as L
 import Data.Map qualified as Map
-import Data.Text.Lazy (Text, pack, unpack)
+import qualified Data.Text.Lazy as T
 import ProgBuilder.ProgBuilderDescription
   ( Property(..),
     propsOfNode,
@@ -22,18 +22,17 @@ import Utility (upper_the_first_char)
 descript :: TSGN.Grammar -> String
 descript grammar =
   let rules = TSGN.grammarNodes grammar
-      builder_def = Map.foldrWithKey (\name rule acc -> acc ++ build name rule) "" rules
-   in imports ++ prologue ++ builder_def
+      builder_def = Map.foldrWithKey (\name rule acc -> T.concat [acc, build name rule]) "" rules
+   in T.unpack $ T.concat [imports, prologue, builder_def]
 
-imports :: String
+imports :: T.Text
 imports =
-  unpack
-    (TT.inst
+    TT.inst
       TTS.import_statement
       (TT.TArray ["strict as assert"])
-      "assert")
+      "assert"
 
-prologue :: String
+prologue :: T.Text
 prologue =
   """
   export class SyntaticNode {
@@ -60,9 +59,9 @@ prologue =
   }\n
   """
 
-build :: String -> TSGN.Node -> String
+build :: String -> TSGN.Node -> T.Text
 build name rule =
-  let className = pack $ node_type_ident name
+  let className = T.pack $ node_type_ident name
       fields = propsOfNode rule
       (baseClass, constructorDef, props) =
         if isLeaf rule
@@ -73,20 +72,19 @@ build name rule =
           else
             ("SyntaticInterior",
               interiorConstructor fields,
-              Just $ TT.TArray $ map pack $ collapse' $ evalState (propFromTSGNs fields) 0)
+              Just $ TT.TArray $ collapse' $ evalState (propFromTSGNs fields) 0)
       methods = Just $ TT.TArray [constructorDef]
-   in (++ "\n") $ unpack $
-        TT.inst TTS.export_qualifier $
+   in TT.inst TTS.export_qualifier $
           TT.inst TTS.class_declare className (Just baseClass) props methods
   where
-    leafConstructor :: Text
+    leafConstructor :: T.Text
     leafConstructor =
       TT.inst
         TTS.const_declare
         (TT.TArray [TT.inst TTS.parameter_declare "value" "string"])
         (TT.TArray [TT.inst TTS.function_call "super" (Just $ TT.TArray [TT.inst TTS.var_ref "value"])])
 
-    interiorConstructor :: [Property] -> Text
+    interiorConstructor :: [Property] -> T.Text
     interiorConstructor _ =
       TT.inst
         TTS.const_declare
@@ -96,28 +94,28 @@ build name rule =
               -- ++ [fieldToConstructorStmt props]
         )
 
-    interiorPrologueStmts :: [Text]
+    interiorPrologueStmts :: [T.Text]
     interiorPrologueStmts =
       [TT.inst TTS.function_call "super" Nothing]
 
 data Field =
-  Field { field_name :: String, field_type :: String } |
+  Field { field_name :: T.Text, field_type :: T.Text } |
   EmptyField
   deriving (Show)
 
-eval :: Field -> String
+eval :: Field -> T.Text
 eval f
-  | (Field f_name f_type) <- f = f_name ++ " : " ++ f_type
+  | (Field f_name f_type) <- f = T.concat [f_name, " : " ,f_type]
   | EmptyField <- f = ""
 
-evalFieldName :: Field -> String
+evalFieldName :: Field -> T.Text
 evalFieldName f
-  | (Field f_name _) <- f = f_name ++ "__i"
+  | (Field f_name _) <- f = T.concat [f_name, "__i"]
   | EmptyField <- f = ""
 
-evalFieldType :: Field -> String
+evalFieldType :: Field -> T.Text
 evalFieldType f
-  | (Field _ f_type) <- f = upper_the_first_char f_type ++ "_T"
+  | (Field _ f_type) <- f = T.pack $ upper_the_first_char (T.unpack f_type) ++ "_T"
   | EmptyField <- f = ""
 
 propFromTSGNs :: [Property] -> State Int [Field]
@@ -133,7 +131,7 @@ propFromTSGN x
   | (SymbolProp p_type) <- x = return $ Field p_type p_type
   | (StrProp _) <- x = return EmptyField
   | (NamedProp p_name p_types) <- x =
-      let prop_literal = p_name ++ "__i"
+      let prop_literal = T.concat [p_name, "__i"]
           -- Igonore the inner field type hence
           -- collapse type of fields only.
           eval_type_str = get >>= \s -> return $ collapseFieldType (evalState (propFromTSGNs p_types) s)
@@ -143,23 +141,23 @@ propFromTSGN x
         put next
         return $ Field prop_literal typestr
 
-collapseFieldType :: [Field] -> String
+collapseFieldType :: [Field] -> T.Text
 collapseFieldType fs = foldl type_plus "" $ map evalFieldType fs
-  where type_plus acc t = acc ++ t ++ " | "
+  where type_plus acc t = T.concat [acc, t, " | "]
 
-collapse' :: [Field] -> [String]
+collapse' :: [Field] -> [T.Text]
 collapse' (EmptyField:_) = []
-collapse' (x:xs) = (eval x ++ ";\n") : collapse' xs
+collapse' (x:xs) = T.concat [eval x, ";\n"] : collapse' xs
 collapse' [] = []
 
-baseType :: TSGN.Node -> String
-baseType (TSGN.Symbol symName) = node_type_ident symName
+baseType :: TSGN.Node -> T.Text
+baseType (TSGN.Symbol symName) = T.pack $ node_type_ident $ T.unpack symName
 baseType (TSGN.Choice members) =
-  let inner = L.intercalate " | " (map baseType members)
-   in "(" ++ inner ++ ")"
+  let inner = T.pack $ L.intercalate " | " (map (T.unpack . baseType) members)
+  in T.concat ["(", inner, ")"]
 baseType (TSGN.Seq _) = "any"
-baseType (TSGN.Repeat content) = baseType content ++ "[]"
-baseType (TSGN.Repeat1 content) = baseType content ++ "[]"
+baseType (TSGN.Repeat content) = T.concat [baseType content, "[]"]
+baseType (TSGN.Repeat1 content) = T.concat [baseType content, "[]"]
 baseType (TSGN.Field _ content) = baseType content
 baseType (TSGN.Prec _ content) = baseType content
 baseType (TSGN.PrecLeft _ content) = baseType content
@@ -169,7 +167,7 @@ baseType (TSGN.Token content) = baseType content
 baseType (TSGN.ImmediateToken content) = baseType content
 baseType (TSGN.Alias content _ _) = baseType content
 baseType (TSGN.Reserved content _) = baseType content
-baseType _ = "any"
+baseType _ = T.pack "any"
 
 -- fieldToConstructorStmt :: [Property] -> Text
 -- fieldToConstructorStmt x
