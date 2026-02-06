@@ -10,6 +10,7 @@ module TreeSitterGrammarNodes
     parseNodeFromJSON,
     parseNodeFromFile,
     isLeaf,
+    mapNode,
   )
 where
 
@@ -62,6 +63,27 @@ data Node
   | Reserved       {content :: Node, contextName :: Text}
   | Empty
   deriving (Show, Eq, Generic, Ord)
+
+mapNode :: (Node -> Node) -> Node -> Node
+mapNode tr n = tr $ case n of
+  Seq members                    -> Seq (map (mapNode tr) members)
+  Choice members                 -> Choice (map (mapNode tr) members)
+  Repeat content                 -> Repeat (mapNode tr content)
+  Repeat1 content                -> Repeat1 (mapNode tr content)
+  Symbol name                    -> Symbol name
+  StringLiteral value            -> StringLiteral value
+  Pattern value                  -> Pattern value
+  Blank                          -> Blank
+  Field fieldName content        -> Field fieldName (mapNode tr content)
+  Alias content named aliasValue -> Alias (mapNode tr content) named aliasValue
+  Token content                  -> Token (mapNode tr content)
+  ImmediateToken content         -> ImmediateToken (mapNode tr content)
+  Prec precedence content        -> Prec precedence (mapNode tr content)
+  PrecLeft precedence content    -> PrecLeft precedence (mapNode tr content)
+  PrecRight precedence content   -> PrecRight precedence (mapNode tr content)
+  PrecDynamic precedence content -> PrecDynamic precedence (mapNode tr content)
+  Reserved content contextName   -> Reserved (mapNode tr content) contextName
+  Empty                          -> Empty
 
 isLeaf :: Node -> Bool
 isLeaf (StringLiteral _) = True
@@ -176,24 +198,24 @@ instance FromJSON Node where
   parseJSON (Object v) = do
     typ <- v .: "type"
     case typ of
-      "SEQ" -> Seq <$> v .: "members"
-      "CHOICE" -> Choice <$> v .: "members"
-      "REPEAT" -> Repeat <$> v .: "content"
-      "REPEAT1" -> Repeat1 <$> v .: "content"
-      "SYMBOL" -> Symbol <$> v .: "name"
-      "STRING" -> StringLiteral <$> v .: "value"
-      "PATTERN" -> Pattern <$> v .: "value"
-      "BLANK" -> return Blank
-      "FIELD" -> Field <$> v .: "name" <*> v .: "content"
-      "ALIAS" -> Alias <$> v .: "content" <*> v .: "named" <*> v .: "value"
-      "TOKEN" -> Token <$> v .: "content"
+      "SEQ"             -> Seq            <$> v .: "members"
+      "CHOICE"          -> Choice         <$> v .: "members"
+      "REPEAT"          -> Repeat         <$> v .: "content"
+      "REPEAT1"         -> Repeat1        <$> v .: "content"
+      "SYMBOL"          -> Symbol         <$> v .: "name"
+      "STRING"          -> StringLiteral  <$> v .: "value"
+      "PATTERN"         -> Pattern        <$> v .: "value"
+      "BLANK"           -> return Blank
+      "FIELD"           -> Field          <$> v .: "name" <*> v .: "content"
+      "ALIAS"           -> Alias          <$> v .: "content" <*> v .: "named" <*> v .: "value"
+      "TOKEN"           -> Token          <$> v .: "content"
       "IMMEDIATE_TOKEN" -> ImmediateToken <$> v .: "content"
-      "PREC" -> Prec <$> v .: "value" <*> v .: "content"
-      "PREC_LEFT" -> PrecLeft <$> v .: "value" <*> v .: "content"
-      "PREC_RIGHT" -> PrecRight <$> v .: "value" <*> v .: "content"
-      "PREC_DYNAMIC" -> PrecDynamic <$> v .: "value" <*> v .: "content"
-      "RESERVED" -> Reserved <$> v .: "content" <*> v .: "context_name"
-      unknown -> fail $ "Unknown node type: " ++ unknown
+      "PREC"            -> Prec           <$> v .: "value" <*> v .: "content"
+      "PREC_LEFT"       -> PrecLeft       <$> v .: "value" <*> v .: "content"
+      "PREC_RIGHT"      -> PrecRight      <$> v .: "value" <*> v .: "content"
+      "PREC_DYNAMIC"    -> PrecDynamic    <$> v .: "value" <*> v .: "content"
+      "RESERVED"        -> Reserved       <$> v .: "content" <*> v .: "context_name"
+      unknown           -> fail $ "Unknown node type: " ++ unknown
   parseJSON invalid =
     prependFailure
       "Parsing Node failed"
@@ -222,45 +244,41 @@ instance ToJSON Grammar where
       ]
         ++ maybe [] (\w -> ["word" .= w]) word
         ++ maybe [] (\e -> ["externals" .= e]) externals
-        ++ maybe [] (\i -> ["inline" .= map (\n -> case n of Symbol name -> name; _ -> error "non-symbol in inline") i]) inline
-        ++ maybe [] (\s -> ["supertypes" .= map (\n -> case n of Symbol name -> name; _ -> error "non-symbol in supertypes") s]) supertypes
+        ++ maybe [] (\i -> ["inline" .= map (\case Symbol name_ -> name_; _ -> error "non-symbol in inline") i]) inline
+        ++ maybe [] (\s -> ["supertypes" .= map (\case Symbol name_ -> name_; _ -> error "non-symbol in supertypes") s]) supertypes
         ++ maybe [] (\r -> ["reserved" .= r]) reserved
 
 instance FromJSON Grammar where
   parseJSON (Object v) = do
-    name <- v .: "name"
-    word <- v .:? "word"
-    nodes <- v .: "rules"
-    externals <- v .:? "externals"
-    inline <- fmap (fmap (map Symbol)) (v .:? "inline")
+    name       <- v .: "name"
+    word       <- v .:? "word"
+    nodes      <- v .: "rules"
+    externals  <- v .:? "externals"
+    reserved   <- v .:? "reserved"
+    inline     <- fmap (fmap (map Symbol)) (v .:? "inline")
     supertypes <- fmap (fmap (map Symbol)) (v .:? "supertypes")
-    reserved <- v .:? "reserved"
     return $ Grammar name word nodes externals inline supertypes reserved
   parseJSON invalid =
     prependFailure
       "Parsing Grammar failed"
       (typeMismatch "Object" invalid)
 
--- | Parse a full grammar from a JSON string.
 parseGrammarFromJSON :: BS.ByteString -> Maybe Grammar
 parseGrammarFromJSON = decode
 
--- | Parse a grammar from a file.
 parseGrammarFromFile :: String -> MaybeT IO Grammar
 parseGrammarFromFile path = do
   content <- lift $ BS.readFile path
   case decode content of
-    Nothing -> MaybeT $ return Nothing
+    Nothing      -> MaybeT $ return Nothing
     Just grammar -> return grammar
 
--- | Parse a single node from a JSON string.
 parseNodeFromJSON :: String -> Maybe Node
 parseNodeFromJSON jsonStr = decode $ BS.pack jsonStr
 
--- | Parse a single node from a file.
 parseNodeFromFile :: String -> MaybeT IO Node
 parseNodeFromFile path = do
   content <- lift $ readFile path
   case decode (BS.pack content) of
-    Nothing -> MaybeT $ return Nothing
+    Nothing   -> MaybeT $ return Nothing
     Just node -> return node

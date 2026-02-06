@@ -20,10 +20,6 @@ import TreeSitterGrammarNodes qualified as TSGN
 import TypedASTGenerator.NodeDescriptionHelper
 import Utility (upper_the_first_char)
 
-import Data.Kind
-
-newtype SS (ctx :: Type -> Type) (a :: Int) = SS [Int]
-
 descript :: TSGN.Grammar -> String
 descript grammar =
   let rules = TSGN.grammarNodes grammar
@@ -207,34 +203,3 @@ mergeDuplicates fields = Map.elems $ L.foldl' insertField Map.empty (filter (not
 
 collapse' :: [Field] -> [T.Text]
 collapse' fields = map (\f -> T.concat [eval f, ";\n"]) (mergeDuplicates fields)
-
-baseType :: TSGN.Node -> T.Text
-baseType (TSGN.Symbol symName) = T.pack $ node_type_ident $ T.unpack symName
-baseType (TSGN.Choice members) =
-  let inner = T.pack $ L.intercalate " | " (map (T.unpack . baseType) members)
-  in T.concat ["(", inner, ")"]
-baseType (TSGN.Seq _) = "any"
-baseType (TSGN.Repeat content) = T.concat [baseType content, "[]"]
-baseType (TSGN.Repeat1 content) = T.concat [baseType content, "[]"]
-baseType (TSGN.Field _ content) = baseType content
-baseType (TSGN.Prec _ content) = baseType content
-baseType (TSGN.PrecLeft _ content) = baseType content
-baseType (TSGN.PrecRight _ content) = baseType content
-baseType (TSGN.PrecDynamic _ content) = baseType content
-baseType (TSGN.Token content) = baseType content
-baseType (TSGN.ImmediateToken content) = baseType content
-baseType (TSGN.Alias content _ _) = baseType content
-baseType (TSGN.Reserved content _) = baseType content
-baseType _ = T.pack "any"
-
--- fieldToConstructorStmt :: [Property] -> Text
--- fieldToConstructorStmt x
---   | (Leaf (InteriorLiteral _)) <- x =
---       error "Construct field for Literal Interior is not expected"
---   | (Leaf (InteriorRef _)) <- x =
---       "{ /* Initialization Ref field */ }"
---   | (Repeat (Leaf (InteriorLiteral _))) <- x =
---       "{ /* Array-field Initialization */ }\n"
---   | (Repeat (Repeat prop)) <- x = fieldToConstructorStmt prop
---   | (Repeat (Choice _)) <- x = pack ""
---   | (Choice _) <- x = pack ""
