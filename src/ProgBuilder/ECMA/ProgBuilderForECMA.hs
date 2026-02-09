@@ -4,8 +4,6 @@
 
 module ProgBuilder.ECMA.ProgBuilderForECMA where
 
-import Control.Monad.Trans.State
-
 import Data.List as L
 import Data.Map qualified as Map
 import qualified Data.Text.Lazy as T
@@ -22,7 +20,7 @@ import Utility (upper_the_first_char)
 
 descript :: TSGN.Grammar -> String
 descript grammar =
-  let rules = TSGN.grammarNodes grammar
+  let rules = TSGN.grammarNodes . TSGN.orig . TSGN.convert $ grammar
       builder_def = Map.foldrWithKey (\name rule acc -> T.concat [acc, build name rule]) "" rules
    in T.unpack $ T.concat [imports, prologue, builder_def]
 
@@ -67,13 +65,13 @@ build name rule =
       (baseClass, constructorDef, props) =
         if isLeaf rule
           then
-            ( "SyntaticLeaf",
-              leafConstructor,
-              Nothing)
+            ("SyntaticLeaf",
+             leafConstructor,
+             Nothing)
           else
             ("SyntaticInterior",
-              interiorConstructor fields,
-              Just $ TT.TArray $ collapse' $ evalState (propFromTSGNs fields) 0)
+             interiorConstructor fields,
+             Just $ TT.TArray $ collapse' $ propFromTSGNs fields)
       methods = Just $ TT.TArray [constructorDef]
    in T.concat [TT.inst TTS.export_qualifier $
         TT.inst TTS.class_declare className (Just baseClass) props methods, "\n"]
@@ -99,11 +97,12 @@ build name rule =
     interiorPrologueStmts =
       [TT.inst TTS.function_call "super" Nothing]
 
+-- | Represent a property field of a Javascript class.
 data Field =
   Field { field_name :: T.Text, field_type :: T.Text } |
   SumField { field_name :: T.Text, field_types :: [T.Text] } |
   EmptyField
-  deriving (Show)
+  deriving (Show, Eq, Ord)
 
 eval :: Field -> T.Text
 eval f
@@ -112,25 +111,10 @@ eval f
   | EmptyField <- f = ""
   where evaluate field = T.concat [evalFieldName field, " : " , evalFieldType field]
 
-mergeFieldType :: Field -> Field -> Field
-mergeFieldType f0 f1 = case (f0, f1) of
-    (Field name0 ty0, Field name1 ty1) | name0 == name1 ->
-        SumField name0 $ dedupTypes [ty0, ty1]
-    (Field name0 ty0, SumField name1 tys1) | name0 == name1 ->
-        SumField name0 $ dedupTypes (ty0 : tys1)
-    (SumField name0 tys0, Field name1 ty1) | name0 == name1 ->
-        SumField name0 $ dedupTypes (tys0 ++ [ty1])
-    (SumField name0 tys0, SumField name1 tys1) | name0 == name1 ->
-        SumField name0 $ dedupTypes (tys0 ++ tys1)
-    _ -> EmptyField
-  where
-    dedupTypes :: [T.Text] -> [T.Text]
-    dedupTypes = L.nub
-
 evalFieldName :: Field -> T.Text
 evalFieldName f
-  | (Field f_name _) <- f = T.concat [f_name, "__i"]
-  | (SumField f_name _) <- f = T.concat [f_name, "__i"]
+  | (Field f_name _) <- f = T.concat [f_name, "_i"]
+  | (SumField f_name _) <- f = T.concat [f_name, "_i"]
   | EmptyField <- f = ""
 
 
@@ -148,58 +132,37 @@ evalFieldType f
     -- Unreachable
     collapseSumType _ = undefined
 
+collapse' :: [Field] -> [T.Text]
+collapse' = map (\f -> T.concat [eval f, ";\n"])
 
-propFromTSGNs :: [Property] -> State Int [Field]
-propFromTSGNs (x:xs) = do
-  ident_id <- get
-  let (field, next) = runState (propFromTSGN x) ident_id
-  return $ field : evalState (propFromTSGNs xs) next
-propFromTSGNs [] = return []
+propFromTSGNs :: [Property] -> [Field]
+propFromTSGNs = foldl (appendIDX 0) [] . (L.group . L.sort . propFromTSGNs')
+  where
+    appendIDX :: Int -> [Field] -> [Field] -> [Field]
+    appendIDX i r (Field f_name f_type : xs) =
+      Field (modifyFieldName i f_name) f_type : appendIDX (i + 1) [] xs ++ r
+    appendIDX i r (SumField f_name f_types : xs) =
+      SumField (modifyFieldName i f_name) f_types : appendIDX (i + 1) [] xs ++ r
+    appendIDX i r (EmptyField : xs) = appendIDX i [] xs ++ r
+    appendIDX _ _ [] = []
 
-propFromTSGN :: Property -> State Int Field
+    modifyFieldName :: Int -> T.Text -> T.Text
+    modifyFieldName i t = T.concat [t, T.pack . ("_" ++) . show $ i]
+
+propFromTSGNs' :: [Property] -> [Field]
+propFromTSGNs' = map propFromTSGN
+
+propFromTSGN :: Property -> Field
 propFromTSGN x
-  | (SymbolProp p_type) <- x = return $ Field p_type p_type
-  | (StrProp _) <- x = return EmptyField
+  | (SymbolProp p_type) <- x = Field p_type p_type
+  | (StrProp _) <- x = EmptyField
   | (NamedProp p_name p_types) <- x =
-      -- Igonore the inner field type hence
-      -- collapse type of fields only.
-      let eval_type_str = get >>=
-            \s -> return $
-                    collapseFieldType (evalState (propFromTSGNs p_types) s)
+      -- Igonore the inner field type hence collapse type of fields only.
+      let eval_type_str = collapseFieldType $ propFromTSGNs' p_types
       in do
-        ident <- get
-        let (typestr,next) = runState eval_type_str ident
-        put next
-        return $ SumField p_name typestr
-
+        let typestr = eval_type_str
+        SumField p_name typestr
   where
     collapseFieldType :: [Field] -> [T.Text]
     collapseFieldType = map field_type . filter
       (\case { EmptyField -> False; _ -> True })
-
-mergeDuplicates :: [Field] -> [Field]
-mergeDuplicates fields = Map.elems $ L.foldl' insertField Map.empty (filter (not . isEmpty) fields)
-  where
-    isEmpty :: Field -> Bool
-    isEmpty EmptyField = True
-    isEmpty _ = False
-
-    insertField :: Map.Map T.Text Field -> Field -> Map.Map T.Text Field
-    insertField acc field = case field of
-      EmptyField -> acc
-      _ -> Map.alter (combine field) (fieldName field) acc
-
-    fieldName :: Field -> T.Text
-    fieldName (Field name _) = name
-    fieldName (SumField name _) = name
-    fieldName EmptyField = ""  -- Should not happen due to case above
-
-    combine :: Field -> Maybe Field -> Maybe Field
-    combine newField Nothing = Just newField
-    combine newField (Just oldField) =
-      case mergeFieldType oldField newField of
-        EmptyField -> Nothing  -- Should not happen for same field names
-        merged -> Just merged
-
-collapse' :: [Field] -> [T.Text]
-collapse' fields = map (\f -> T.concat [eval f, ";\n"]) (mergeDuplicates fields)

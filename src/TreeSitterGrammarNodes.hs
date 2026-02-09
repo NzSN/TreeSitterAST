@@ -1,16 +1,20 @@
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE OverloadedRecordDot #-}
 
 module TreeSitterGrammarNodes
   ( Node (..),
     PrecedenceValue (..),
     Nodes,
     Grammar (..),
+    Grammar' (..),
+    convert,
     parseGrammarFromJSON,
     parseGrammarFromFile,
     parseNodeFromJSON,
     parseNodeFromFile,
     isLeaf,
     mapNode,
+    resolveAlias
   )
 where
 
@@ -19,8 +23,11 @@ import Control.Monad.Trans.Maybe
 import Data.Aeson
 import Data.Aeson.Types
 import Data.Map (Map)
+import qualified Data.Map as Map
 import Data.Text.Lazy (Text, fromStrict)
 import qualified Data.ByteString.Lazy.Char8 as BS
+import qualified Data.Set as Set
+import Data.Maybe (mapMaybe)
 import GHC.Generics
 
 -- | Precedence value can be either a named precedence (string) or numeric precedence (int).
@@ -84,6 +91,30 @@ mapNode tr n = tr $ case n of
   PrecDynamic precedence content -> PrecDynamic precedence (mapNode tr content)
   Reserved content contextName   -> Reserved (mapNode tr content) contextName
   Empty                          -> Empty
+
+resolveAlias :: Grammar -> Grammar
+resolveAlias grammar = grammar
+  { grammarNodes = Map.map resolveNode grammar.grammarNodes
+  , grammarExternals = fmap (map resolveNode) (grammarExternals grammar)
+  , grammarInline = fmap (map resolveNode) (grammarInline grammar)
+  , grammarSupertypes = fmap (map resolveNode) (grammarSupertypes grammar)
+  , grammarReserved = fmap (Map.map (map resolveNode)) (grammarReserved grammar)
+  }
+  where
+    -- externalsSet = Set.fromList $ concatMap (maybe [] (mapMaybe nodeIdentifier)) [grammarExternals grammar]
+    externalsSet = Set.fromList $ maybe [] (mapMaybe nodeIdentifier) (grammarExternals grammar)
+    nodeIdentifier :: Node -> Maybe Text
+    nodeIdentifier (Symbol name) = Just name
+    nodeIdentifier (StringLiteral value) = Just value
+    nodeIdentifier (Pattern value) = Just value
+    nodeIdentifier _ = Nothing
+
+    resolveNode = mapNode replaceAlias
+    replaceAlias (Alias content named aliasValue) =
+      case nodeIdentifier content of
+        Just ident | ident `Set.member` externalsSet -> Empty
+        _ -> content
+    replaceAlias node = node
 
 isLeaf :: Node -> Bool
 isLeaf (StringLiteral _) = True
@@ -223,6 +254,12 @@ instance FromJSON Node where
 
 -- | A map from node name to node definition.
 type Nodes = Map String Node
+
+-- | A form of Grammar that all intermidiate information of
+-- | nodes are resolved into lower node as possible.
+newtype Grammar' = Grammar' { orig :: Grammar }
+convert :: Grammar -> Grammar'
+convert = Grammar' . resolveAlias
 
 -- | Full grammar definition.
 data Grammar = Grammar
