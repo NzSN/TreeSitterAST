@@ -85,6 +85,9 @@ mapNode tr n = tr $ case n of
   Reserved content contextName   -> Reserved (mapNode tr content) contextName
   Empty                          -> Empty
 
+resolveAlias :: Grammar -> Grammar
+resolveAlias = undefined
+
 isLeaf :: Node -> Bool
 isLeaf (StringLiteral _) = True
 isLeaf (Pattern _) = True
