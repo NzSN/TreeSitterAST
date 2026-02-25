@@ -1,14 +1,14 @@
+{-# LANGUAGE KindSignatures #-}
 {-# LANGUAGE MultilineStrings #-}
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE KindSignatures #-}
 
 module ProgBuilder.ECMA.ProgBuilderForECMA where
 
 import Data.List as L
 import Data.Map qualified as Map
-import qualified Data.Text.Lazy as T
+import Data.Text.Lazy qualified as T
 import ProgBuilder.ProgBuilderDescription
-  ( Property(..),
+  ( Property (..),
     propsOfNode,
   )
 import Template.Template qualified as TT
@@ -26,10 +26,10 @@ descript grammar =
 
 imports :: T.Text
 imports =
-    TT.inst
-      TTS.import_statement
-      (TT.TArray ["strict as assert"])
-      "assert"
+  TT.inst
+    TTS.import_statement
+    (TT.TArray ["strict as assert"])
+    "assert"
 
 prologue :: T.Text
 prologue =
@@ -65,16 +65,21 @@ build name rule =
       (baseClass, constructorDef, props) =
         if isLeaf rule
           then
-            ("SyntaticLeaf",
-             leafConstructor,
-             Nothing)
+            ( "SyntaticLeaf",
+              leafConstructor,
+              Nothing
+            )
           else
-            ("SyntaticInterior",
-             interiorConstructor fields,
-             Just $ TT.TArray $ collapse' $ propFromTSGNs fields)
+            ( "SyntaticInterior",
+              interiorConstructor fields,
+              Just $ TT.TArray $ collapse' $ propFromTSGNs fields
+            )
       methods = Just $ TT.TArray [constructorDef]
-   in T.concat [TT.inst TTS.export_qualifier $
-        TT.inst TTS.class_declare className (Just baseClass) props methods, "\n"]
+   in T.concat
+        [ TT.inst TTS.export_qualifier $
+            TT.inst TTS.class_declare className (Just baseClass) props methods,
+          "\n"
+        ]
   where
     leafConstructor :: T.Text
     leafConstructor =
@@ -88,9 +93,9 @@ build name rule =
       TT.inst
         TTS.const_declare
         (TT.TArray [])
-        (TT.TArray
+        ( TT.TArray
             interiorPrologueStmts
-              -- ++ [fieldToConstructorStmt props]
+            -- ++ [fieldToConstructorStmt props]
         )
 
     interiorPrologueStmts :: [T.Text]
@@ -98,10 +103,10 @@ build name rule =
       [TT.inst TTS.function_call "super" Nothing]
 
 -- | Represent a property field of a Javascript class.
-data Field =
-  Field { field_name :: T.Text, field_type :: T.Text } |
-  SumField { field_name :: T.Text, field_types :: [T.Text] } |
-  EmptyField
+data Field
+  = Field {field_name :: T.Text, field_type :: T.Text}
+  | SumField {field_name :: T.Text, field_types :: [T.Text]}
+  | EmptyField
   deriving (Show, Eq, Ord)
 
 eval :: Field -> T.Text
@@ -109,7 +114,8 @@ eval f
   | field@(Field _ _) <- f = evaluate field
   | field@(SumField _ _) <- f = evaluate field
   | EmptyField <- f = ""
-  where evaluate field = T.concat [evalFieldName field, " : " , evalFieldType field]
+  where
+    evaluate field = T.concat [evalFieldName field, " : ", evalFieldType field]
 
 evalFieldName :: Field -> T.Text
 evalFieldName f
@@ -117,12 +123,11 @@ evalFieldName f
   | (SumField f_name _) <- f = T.concat [f_name, "_i"]
   | EmptyField <- f = ""
 
-
 evalFieldType :: Field -> T.Text
 evalFieldType f
   | (Field _ f_type) <- f =
       T.pack $ upper_the_first_char (T.unpack f_type) ++ "_T"
-   | field@(SumField _ _) <- f = collapseSumType field
+  | field@(SumField _ _) <- f = collapseSumType field
   | EmptyField <- f = ""
   where
     collapseSumType :: Field -> T.Text
@@ -159,10 +164,12 @@ propFromTSGN x
   | (NamedProp p_name p_types) <- x =
       -- Igonore the inner field type hence collapse type of fields only.
       let eval_type_str = collapseFieldType $ propFromTSGNs' p_types
-      in do
-        let typestr = eval_type_str
-        SumField p_name typestr
+       in do
+            let typestr = eval_type_str
+            SumField p_name typestr
   where
     collapseFieldType :: [Field] -> [T.Text]
-    collapseFieldType = map field_type . filter
-      (\case { EmptyField -> False; _ -> True })
+    collapseFieldType =
+      map field_type
+        . filter
+          (\case EmptyField -> False; _ -> True)
