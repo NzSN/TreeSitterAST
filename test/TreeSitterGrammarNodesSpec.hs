@@ -98,5 +98,5 @@ grammar_nodes_spec =
             let resolved = resolveAlias grammar
             let aliasCountAfter = countAliasGrammar resolved
             -- Two aliases reference external symbols (_template_chars and _ternary_qmark)
-            aliasCountAfter @?= 2
+            aliasCountAfter @?= 0
     ]

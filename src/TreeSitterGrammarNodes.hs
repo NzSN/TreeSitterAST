@@ -15,6 +15,7 @@ module TreeSitterGrammarNodes
     isLeaf,
     mapNode,
     resolveAlias,
+    trimExternals,
   )
 where
 
@@ -92,24 +93,43 @@ mapNode tr n = tr $ case n of
   Reserved content contextName -> Reserved (mapNode tr content) contextName
   Empty -> Empty
 
-resolveAlias :: Grammar -> Grammar
-resolveAlias grammar =
+-- | Apply a node transformation to relevant fields of a grammar.
+applyNodeTransform :: (Node -> Node) -> Bool -> Grammar -> Grammar
+applyNodeTransform nodeTransform includeExternals grammar =
   grammar
-    { grammarNodes = Map.map resolveNode grammar.grammarNodes,
-      grammarExternals = fmap (map resolveNode) (grammarExternals grammar),
-      grammarInline = fmap (map resolveNode) (grammarInline grammar),
-      grammarSupertypes = fmap (map resolveNode) (grammarSupertypes grammar),
-      grammarReserved = fmap (Map.map (map resolveNode)) (grammarReserved grammar)
+    { grammarNodes = Map.map nodeTransform grammar.grammarNodes,
+      grammarExternals = if includeExternals then fmap (map nodeTransform) (grammarExternals grammar) else grammarExternals grammar,
+      grammarInline = fmap (map nodeTransform) (grammarInline grammar),
+      grammarSupertypes = fmap (map nodeTransform) (grammarSupertypes grammar),
+      grammarReserved = fmap (Map.map (map nodeTransform)) (grammarReserved grammar)
     }
-  where
-    -- externalsSet = Set.fromList $ concatMap (maybe [] (mapMaybe nodeIdentifier)) [grammarExternals grammar]
-    externalsSet = Set.fromList $ maybe [] (mapMaybe nodeIdentifier) (grammarExternals grammar)
-    nodeIdentifier :: Node -> Maybe Text
-    nodeIdentifier (Symbol name) = Just name
-    nodeIdentifier (StringLiteral value) = Just value
-    nodeIdentifier (Pattern value) = Just value
-    nodeIdentifier _ = Nothing
 
+-- | Extract identifier from a node (Symbol name, StringLiteral value, Pattern value).
+nodeIdentifier :: Node -> Maybe Text
+nodeIdentifier (Symbol name) = Just name
+nodeIdentifier (StringLiteral value) = Just value
+nodeIdentifier (Pattern value) = Just value
+nodeIdentifier _ = Nothing
+
+-- | Get the set of identifiers from grammar's external definitions.
+getExternalsSet :: Grammar -> Set.Set Text
+getExternalsSet grammar = Set.fromList $ maybe [] (mapMaybe nodeIdentifier) (grammarExternals grammar)
+
+-- | Trim out all Symbol node such that it's name present
+-- in external in Grammar.
+trimExternals :: Grammar -> Grammar
+trimExternals grammar = applyNodeTransform trimNode False grammar
+  where
+    externalsSet = getExternalsSet grammar
+    trimNode = mapNode replaceExternal
+    replaceExternal node = case node of
+      Symbol name | name `Set.member` externalsSet -> Empty
+      _ -> node
+
+resolveAlias :: Grammar -> Grammar
+resolveAlias grammar = applyNodeTransform resolveNode True grammar
+  where
+    externalsSet = getExternalsSet grammar
     resolveNode = mapNode replaceAlias
     replaceAlias (Alias content named aliasValue) =
       case nodeIdentifier content of
@@ -264,7 +284,7 @@ type Nodes = Map String Node
 newtype Grammar' = Grammar' {orig :: Grammar}
 
 convert :: Grammar -> Grammar'
-convert = Grammar' . resolveAlias
+convert = Grammar' . trimExternals . resolveAlias
 
 -- | Full grammar definition.
 data Grammar = Grammar

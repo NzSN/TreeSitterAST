@@ -131,6 +131,7 @@ test-suite TreeSitterAST-test
     other-modules: Template.TypeScriptTemplateSpec,
                    Fundamentals.FileSpec,
                    TreeSitterGrammarNodesSpec,
+                   ProgBuilderUtilitiesSpec,
 
     -- LANGUAGE extensions used by modules in this package.
     -- other-extensions:

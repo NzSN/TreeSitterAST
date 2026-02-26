@@ -9,7 +9,7 @@ import Data.Map qualified as Map
 import Data.Text.Lazy qualified as T
 import ProgBuilder.ProgBuilderDescription
   ( Property (..),
-    propsOfNode,
+    propsOfNode, propIdent,
   )
 import Template.Template qualified as TT
 import Template.TypeScriptTemplate qualified as TTS
@@ -161,15 +161,5 @@ propFromTSGN :: Property -> Field
 propFromTSGN x
   | (SymbolProp p_type) <- x = Field p_type p_type
   | (StrProp _) <- x = EmptyField
-  | (NamedProp p_name p_types) <- x =
-      -- Igonore the inner field type hence collapse type of fields only.
-      let eval_type_str = collapseFieldType $ propFromTSGNs' p_types
-       in do
-            let typestr = eval_type_str
-            SumField p_name typestr
-  where
-    collapseFieldType :: [Field] -> [T.Text]
-    collapseFieldType =
-      map field_type
-        . filter
-          (\case EmptyField -> False; _ -> True)
+  | (NamedProp p_name p_types) <- x = do
+      SumField p_name $ map propIdent p_types
