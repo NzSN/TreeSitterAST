@@ -5,7 +5,7 @@ module ProgBuilder.ProgBuilderDescription
     propsOfNode,
     uniqueBranch,
     convergeNamedProp,
-    propIdent,
+    propType,
   )
 where
 
@@ -20,11 +20,11 @@ data Property
   | NamedProp {p_name :: T.Text, p_types :: [Property]}
   deriving (Eq, Ord, Show)
 
-propIdent :: Property -> T.Text
-propIdent x
-  | (StrProp s) <- x = s
-  | (SymbolProp s) <- x = s
-  | (NamedProp s _) <- x = s
+propType :: Property -> Maybe T.Text
+propType x
+  | (StrProp _) <- x = Nothing
+  | (SymbolProp s) <- x = Just s
+  | (NamedProp s _) <- x = Just s
 
 propsOfNode :: TSGN.Node -> [Property]
 propsOfNode x

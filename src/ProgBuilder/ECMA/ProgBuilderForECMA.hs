@@ -9,7 +9,7 @@ import Data.Map qualified as Map
 import Data.Text.Lazy qualified as T
 import ProgBuilder.ProgBuilderDescription
   ( Property (..),
-    propsOfNode, propIdent,
+    propsOfNode, propType,
   )
 import Template.Template qualified as TT
 import Template.TypeScriptTemplate qualified as TTS
@@ -133,9 +133,16 @@ evalFieldType f
     collapseSumType :: Field -> T.Text
     collapseSumType (SumField _ []) = T.pack "undefined"
     collapseSumType (SumField _ types) =
-      T.pack $ L.intercalate " | " $ map ((++ "_T") . upper_the_first_char . T.unpack) types
+      T.pack $ L.intercalate " | " $
+        nub $ map typeShow types
     -- Unreachable
     collapseSumType _ = undefined
+
+    typeShow :: T.Text -> String
+    typeShow x = if isBuiltin x
+                  then T.unpack x
+                  else (++ "_T") . upper_the_first_char . T.unpack $ x
+
 
 collapse' :: [Field] -> [T.Text]
 collapse' = map (\f -> T.concat [eval f, ";\n"])
@@ -162,4 +169,15 @@ propFromTSGN x
   | (SymbolProp p_type) <- x = Field p_type p_type
   | (StrProp _) <- x = EmptyField
   | (NamedProp p_name p_types) <- x = do
-      SumField p_name $ map propIdent p_types
+      SumField p_name $ map (asTypeStr . propType) p_types
+  where
+    asTypeStr :: Maybe T.Text -> T.Text
+    asTypeStr x'
+      | Nothing <- x' = "string"
+      | Just s  <- x' = s
+
+-- | ECMA Knowledge
+isBuiltin :: T.Text -> Bool
+isBuiltin x
+  | x == "string" = True
+  | otherwise = False
