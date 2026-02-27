@@ -2,7 +2,8 @@
 {-# LANGUAGE OverloadedStrings #-}
 
 module TreeSitterGrammarNodes
-  ( Node (..),
+  ( GrammarNode(..),
+    Node,
     PrecedenceValue (..),
     Nodes,
     Grammar (..),
@@ -13,9 +14,9 @@ module TreeSitterGrammarNodes
     parseNodeFromJSON,
     parseNodeFromFile,
     isLeaf,
-    mapNode,
     resolveAlias,
     trimExternals,
+    mapNode,
   )
 where
 
@@ -51,26 +52,88 @@ instance FromJSON PrecedenceValue where
         (typeMismatch "String or Number" v)
 
 -- | A grammar node.
-data Node
-  = Seq {members :: [Node]}
-  | Choice {members :: [Node]}
-  | Repeat {content :: Node}
-  | Repeat1 {content :: Node}
-  | Symbol {name :: Text}
-  | StringLiteral {value :: Text}
-  | Pattern {value :: Text}
+data GrammarNode a
+  = Seq {members :: [GrammarNode a]}
+  | Choice {members :: [GrammarNode a]}
+  | Repeat {content :: GrammarNode a}
+  | Repeat1 {content :: GrammarNode a}
+  | Symbol {name :: a}
+  | StringLiteral {value :: a}
+  | Pattern {value :: a}
   | Blank
-  | Field {fieldName :: Text, content :: Node}
-  | Alias {content :: Node, named :: Bool, aliasValue :: Text}
-  | Token {content :: Node}
-  | ImmediateToken {content :: Node}
-  | Prec {precedence :: PrecedenceValue, content :: Node}
-  | PrecLeft {precedence :: PrecedenceValue, content :: Node}
-  | PrecRight {precedence :: PrecedenceValue, content :: Node}
-  | PrecDynamic {precedence :: PrecedenceValue, content :: Node}
-  | Reserved {content :: Node, contextName :: Text}
+  | Field {fieldName :: a, content :: GrammarNode a}
+  | Alias {content :: GrammarNode a, named :: Bool, aliasValue :: a}
+  | Token {content :: GrammarNode a}
+  | ImmediateToken {content :: GrammarNode a}
+  | Prec {precedence :: PrecedenceValue, content :: GrammarNode a}
+  | PrecLeft {precedence :: PrecedenceValue, content :: GrammarNode a}
+  | PrecRight {precedence :: PrecedenceValue, content :: GrammarNode a}
+  | PrecDynamic {precedence :: PrecedenceValue, content :: GrammarNode a}
+  | Reserved {content :: GrammarNode a, contextName :: a}
   | Empty
   deriving (Show, Eq, Generic, Ord)
+instance Functor GrammarNode where
+  fmap f node = case node of
+    Seq members -> Seq (fmap (fmap f) members)
+    Choice members -> Choice (fmap (fmap f) members)
+    Repeat content -> Repeat (fmap f content)
+    Repeat1 content -> Repeat1 (fmap f content)
+    Symbol name -> Symbol (f name)
+    StringLiteral value -> StringLiteral (f value)
+    Pattern value -> Pattern (f value)
+    Blank -> Blank
+    Field fieldName content -> Field (f fieldName) (fmap f content)
+    Alias content _named aliasValue -> Alias (fmap f content) _named (f aliasValue)
+    Token content -> Token (fmap f content)
+    ImmediateToken content -> ImmediateToken (fmap f content)
+    Prec precedence content -> Prec precedence (fmap f content)
+    PrecLeft precedence content -> PrecLeft precedence (fmap f content)
+    PrecRight precedence content -> PrecRight precedence (fmap f content)
+    PrecDynamic precedence content -> PrecDynamic precedence (fmap f content)
+    Reserved content contextName -> Reserved (fmap f content) (f contextName)
+    Empty -> Empty
+
+instance Foldable GrammarNode where
+  foldMap f node = case node of
+    Seq members -> foldMap (foldMap f) members
+    Choice members -> foldMap (foldMap f) members
+    Repeat content -> foldMap f content
+    Repeat1 content -> foldMap f content
+    Symbol name -> f name
+    StringLiteral value -> f value
+    Pattern value -> f value
+    Blank -> mempty
+    Field fieldName content -> f fieldName <> foldMap f content
+    Alias content _named aliasValue -> foldMap f content <> f aliasValue
+    Token content -> foldMap f content
+    ImmediateToken content -> foldMap f content
+    Prec _ content -> foldMap f content
+    PrecLeft _ content -> foldMap f content
+    PrecRight _ content -> foldMap f content
+    PrecDynamic _ content -> foldMap f content
+    Reserved content contextName -> foldMap f content <> f contextName
+    Empty -> mempty
+
+instance Traversable GrammarNode where
+  traverse f node = case node of
+    Seq members -> Seq <$> traverse (traverse f) members
+    Choice members -> Choice <$> traverse (traverse f) members
+    Repeat content -> Repeat <$> traverse f content
+    Symbol name -> Symbol <$> f name
+    StringLiteral value -> StringLiteral <$> f value
+    Pattern value -> Pattern <$> f value
+    Blank -> pure Blank
+    Field fieldName content -> Field <$> f fieldName <*> traverse f content
+    Alias content _named aliasValue -> Alias <$> traverse f content <*> pure _named <*> f aliasValue
+    Token content -> Token <$> traverse f content
+    ImmediateToken content -> ImmediateToken <$> traverse f content
+    Prec precedence content -> Prec precedence <$> traverse f content
+    PrecLeft precedence content -> PrecLeft precedence <$> traverse f content
+    PrecRight precedence content -> PrecRight precedence <$> traverse f content
+    PrecDynamic precedence content -> PrecDynamic precedence <$> traverse f content
+    Reserved content contextName -> Reserved <$> traverse f content <*> f contextName
+    Empty -> pure Empty
+type Node = GrammarNode Text
 
 mapNode :: (Node -> Node) -> Node -> Node
 mapNode tr n = tr $ case n of
@@ -131,7 +194,7 @@ resolveAlias grammar = applyNodeTransform resolveNode True grammar
   where
     externalsSet = getExternalsSet grammar
     resolveNode = mapNode replaceAlias
-    replaceAlias (Alias content named aliasValue) =
+    replaceAlias (Alias content _named _aliasValue) =
       case nodeIdentifier content of
         -- \| TODO: Need to deal with external node that ref by
         -- \|       alias node.
