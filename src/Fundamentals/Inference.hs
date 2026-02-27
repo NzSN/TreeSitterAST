@@ -27,3 +27,6 @@ trans :: (Text -> InferGN Text) -> TextGN -> TextGN
 trans f n = fst $ runState (mapM f n) $ IM TSGN.Empty []
 
 -- | Inference Rules
+
+choiceTrans :: Text -> InferGN Text
+choiceTrans = undefined
