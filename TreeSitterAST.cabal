@@ -134,6 +134,7 @@ test-suite TreeSitterAST-test
                    Fundamentals.FileSpec,
                    TreeSitterGrammarNodesSpec,
                    ProgBuilderUtilitiesSpec,
+                   Fundamentals.InferenceSpec,
 
     -- LANGUAGE extensions used by modules in this package.
     -- other-extensions:
@@ -151,6 +152,7 @@ test-suite TreeSitterAST-test
     build-depends:
         base <=4.22.0.0,
         TreeSitterAST,
+        bytestring,
         transformers >= 0.6.1.2,
         containers,
         HUnit >= 1.6.2.0,
