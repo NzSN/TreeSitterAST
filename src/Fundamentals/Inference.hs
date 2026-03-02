@@ -38,8 +38,6 @@ data InferenceMeta a = IM {
   deriving (Eq, Ord, Show)
 
 type InferGN = State (InferenceMeta TextGN)
-trans :: (Text -> InferGN Text) -> TextGN -> TextGN
-trans f n = fst $ runState (mapM f n) $ IM TSGN.Empty Nothing 0 False [] Set.empty
 
 -- | Split CHOICE node: empty its members if it's top-most CHOICE.
 splitChoiceRule :: TSGN.Node -> InferGN TSGN.Node
@@ -283,3 +281,7 @@ transformGrammarWithChoiceSplitting :: TSGN.Grammar -> TSGN.Grammar
 transformGrammarWithChoiceSplitting grammar =
   let (grammarWithEmptyChoices, inferenceMeta) = splitChoicesInGrammar grammar
   in fst $ addAlternativeRules grammarWithEmptyChoices inferenceMeta
+
+-- | trans
+trans :: TSGN.Grammar -> TSGN.Grammar
+trans = transformGrammarWithChoiceSplitting

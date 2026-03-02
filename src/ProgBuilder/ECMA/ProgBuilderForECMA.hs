@@ -15,7 +15,7 @@ import Template.Template qualified as TT
 import Template.TypeScriptTemplate qualified as TTS
 import TreeSitterGrammarNodes (isLeaf)
 import TreeSitterGrammarNodes qualified as TSGN
-import Fundamentals.Inference (transformGrammarWithChoiceSplitting)
+import Fundamentals.Inference (trans)
 import TypedASTGenerator.NodeDescriptionHelper
 import Utility (upper_the_first_char)
 
@@ -23,7 +23,7 @@ descript :: TSGN.Grammar -> String
 descript grammar =
   let processed = TSGN.convert grammar
       origGrammar = TSGN.orig processed
-      transformedGrammar = transformGrammarWithChoiceSplitting origGrammar
+      transformedGrammar = trans origGrammar
       rules = TSGN.grammarNodes transformedGrammar
       builder_def = Map.foldrWithKey (\name rule acc -> T.concat [acc, build name rule]) "" rules
    in T.unpack $ T.concat [imports, prologue, builder_def]
