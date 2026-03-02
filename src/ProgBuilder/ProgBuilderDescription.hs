@@ -14,17 +14,28 @@ import Data.Map qualified as Map
 import Data.Text.Lazy qualified as T
 import TreeSitterGrammarNodes qualified as TSGN
 
+-- | Generation hints for properties
+data GenerationHint
+  = LiteralHint T.Text  -- ^ Literal string value
+  | PatternHint T.Text  -- ^ Regex pattern
+  | SymbolHint T.Text   -- ^ Symbol reference
+  | FieldHint T.Text    -- ^ Field name
+  | DefaultHint T.Text  -- ^ Default value
+  | RangeHint Int Int   -- ^ Min/max range (for repetitions)
+  | ChoiceHint [T.Text] -- ^ Possible values (for choices)
+  deriving (Eq, Ord, Show)
+
 data Property
-  = StrProp {str_value :: T.Text}
-  | SymbolProp {p_type :: T.Text}
-  | NamedProp {p_name :: T.Text, p_types :: [Property]}
+  = StrProp {str_value :: T.Text, hint :: Maybe GenerationHint}
+  | SymbolProp {p_type :: T.Text, hint :: Maybe GenerationHint}
+  | NamedProp {p_name :: T.Text, p_types :: [Property], hint :: Maybe GenerationHint}
   deriving (Eq, Ord, Show)
 
 propType :: Property -> Maybe T.Text
 propType x
-  | (StrProp _) <- x = Nothing
-  | (SymbolProp s) <- x = Just s
-  | (NamedProp s _) <- x = Just s
+  | (StrProp _ _) <- x = Nothing
+  | (SymbolProp s _) <- x = Just s
+  | (NamedProp s _ _) <- x = Just s
 
 propsOfNode :: TSGN.Node -> [Property]
 propsOfNode x
@@ -32,11 +43,12 @@ propsOfNode x
   | (TSGN.Choice ns) <- x = choiceProc $ map propsOfNode ns
   | (TSGN.Repeat n) <- x = propsOfNode n
   | (TSGN.Repeat1 n) <- x = propsOfNode n
-  | (TSGN.Symbol n) <- x = [SymbolProp n]
-  | (TSGN.StringLiteral n) <- x = [StrProp n]
+  | (TSGN.Symbol n) <- x = [SymbolProp n (Just (SymbolHint n))]
+  | (TSGN.StringLiteral n) <- x = [StrProp n (Just (LiteralHint n))]
+  | (TSGN.Pattern n) <- x = [StrProp n (Just (PatternHint n))]
   | (TSGN.Token n) <- x = propsOfNode n
   | (TSGN.ImmediateToken n) <- x = propsOfNode n
-  | (TSGN.Field f_name n) <- x = [NamedProp f_name $ propsOfNode n]
+  | (TSGN.Field f_name n) <- x = [NamedProp f_name (propsOfNode n) (Just (FieldHint f_name))]
   | (TSGN.Prec _ n) <- x = propsOfNode n
   | (TSGN.PrecLeft _ n) <- x = propsOfNode n
   | (TSGN.PrecRight _ n) <- x = propsOfNode n
@@ -110,7 +122,7 @@ convergeNamedProp branches =
   where
     -- Helper to check if a property is a NamedProp
     isNamedProp :: Property -> Bool
-    isNamedProp (NamedProp _ _) = True
+    isNamedProp (NamedProp _ _ _) = True
     isNamedProp _ = False
 
     -- Merge top-level NamedProps across branches, returning:
@@ -126,7 +138,7 @@ convergeNamedProp branches =
           nameAccum =
             foldr
               ( \(i, prop) acc -> case prop of
-                  NamedProp name types ->
+                  NamedProp name types _ ->
                     let (typesAccum, brs) = Map.findWithDefault ([], []) name acc
                         newTypesAccum = nub (typesAccum ++ types)
                         newBranches = i : brs
@@ -137,10 +149,10 @@ convergeNamedProp branches =
               namedPropsWithBranches
 
           -- Convert to final maps
-          mergedMap = Map.map (\(typesAccum, _) -> NamedProp (T.pack "") typesAccum) nameAccum
+          mergedMap = Map.map (\(typesAccum, _) -> NamedProp (T.pack "") typesAccum Nothing) nameAccum
           -- Fix the names (they were lost in the map)
-          mergedMapWithNames = Map.mapWithKey (\name prop -> case prop of NamedProp _ types -> processProperty (NamedProp name types); _ -> prop) mergedMap
-          minBranchMap = Map.map (\(_, brs) -> minimum brs) nameAccum
+          mergedMapWithNames = Map.mapWithKey (\name prop -> case prop of NamedProp _ types hint -> processProperty (NamedProp name types hint); _ -> prop) mergedMap
+          minBranchMap = Map.map (\(_, brs) -> minimum (brs :: [Int])) nameAccum
        in (mergedMapWithNames, minBranchMap)
 
     -- Recursively merge NamedProps within an array (including nested arrays)
@@ -155,28 +167,32 @@ convergeNamedProp branches =
     -- Process a single property (recursive)
     processProperty :: Property -> Property
     processProperty prop = case prop of
-      NamedProp name types ->
+      NamedProp name types hint ->
         let processedTypes = mergeNamedPropsInArray types
-         in NamedProp name processedTypes
+         in NamedProp name processedTypes hint
       other -> other
 
     -- Partition properties into NamedProps and others
     partitionNamedProps :: [Property] -> ([Property], [Property])
     partitionNamedProps = foldr splitter ([], [])
       where
-        splitter p@(NamedProp _ _) (named, others) = (p : named, others)
+        splitter p@(NamedProp _ _ _) (named, others) = (p : named, others)
         splitter p (named, others) = (named, p : others)
 
     -- Insert a NamedProp into a map keyed by p_name, merging p_types
     insertNamedProp :: Property -> Map.Map T.Text Property -> Map.Map T.Text Property
-    insertNamedProp (NamedProp name types) acc =
-      Map.insertWith mergeTypes name (NamedProp name types) acc
+    insertNamedProp (NamedProp name types hint) acc =
+      Map.insertWith mergeTypes name (NamedProp name types hint) acc
     insertNamedProp _ acc = acc -- Should never happen, only NamedProps passed
 
     -- Merge two NamedProps with same name by concatenating and deduplicating their p_types
     -- Map.insertWith calls mergeTypes newValue oldValue
     mergeTypes :: Property -> Property -> Property
     mergeTypes newValue oldValue = case (newValue, oldValue) of
-      (NamedProp name1 types1, NamedProp _ types2) ->
-        NamedProp name1 (nub (types2 ++ types1)) -- old types then new types
+      (NamedProp name1 types1 hint1, NamedProp _ types2 hint2) ->
+        -- Keep hint from new value, or old if new has none
+        let hint = case hint1 of
+              Nothing -> hint2
+              Just _ -> hint1
+        in NamedProp name1 (nub (types2 ++ types1)) hint -- old types then new types
       _ -> error "mergeTypes: expected NamedProp"

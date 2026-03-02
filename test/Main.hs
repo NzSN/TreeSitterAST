@@ -7,6 +7,7 @@ import Fundamentals.FileSpec (file_spec)
 import TreeSitterGrammarNodesSpec (grammar_nodes_spec)
 import ProgBuilderUtilitiesSpec (prog_builder_utilities_spec)
 import Fundamentals.InferenceSpec (inference_spec)
+import Fundamentals.GenerationSpec (generation_spec)
 
 main :: IO ()
 main = defaultMain tests
@@ -16,4 +17,4 @@ tests = testGroup "Tests" [unitTests]
 
 unitTests :: TestTree
 unitTests = testGroup "Unit tests"
-  [template_testcase, file_spec, grammar_nodes_spec, prog_builder_utilities_spec, inference_spec]
+  [template_testcase, file_spec, grammar_nodes_spec, prog_builder_utilities_spec, inference_spec, generation_spec]

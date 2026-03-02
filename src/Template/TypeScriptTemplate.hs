@@ -24,12 +24,15 @@ module Template.TypeScriptTemplate
    array_field_initialize,
    case_expression,
    switch_statements,
-   node_processor_proc_template
+   node_processor_proc_template,
+   evaluate_method,
+   static_factory_method,
+   builder_pattern_class
    ) where
 
 import Template.Template (Template(..), TArray(..), inst)
 
-import Formatting ((%), commaSep, text, optioned, spaced, formatToString)
+import Formatting ((%), commaSep, text, optioned, spaced, formatToString, now)
 import Formatting.Formatters (build)
 import Data.Text.Lazy (Text, unpack, pack)
 import TypedASTGenerator.NodeDescriptionHelper
@@ -84,7 +87,7 @@ method_declare :: Template (-- Method Ident
                             TArray Text ->
                             Text)
 method_declare = T $
-  text % "(" % build % ")" % (optioned (": " % text)) % " { " % build % " }"
+  text % "(" % commaSep build % ")" % (optioned (": " % text)) % " { " % build % " }"
 
 prop_declare :: Template (Text -> Text -> Text)
 prop_declare = T $ text % " : " % text % ";"
@@ -92,7 +95,7 @@ prop_declare = T $ text % " : " % text % ";"
 const_declare :: Template (TArray Text -> -- Parameters
                            TArray Text -> -- Statements
                            Text)
-const_declare = T $ "constructor(" % build % ") { " % build % " }"
+const_declare = T $ "constructor(" % commaSep build % ") { " % build % " }"
 
 composed_type_declare :: Bool -> -- Is Interface ?
                          Template (
@@ -211,3 +214,15 @@ switch_statements = inst $ T $ "switch (" % text % ") { " % build % " }"
 node_processor_proc_template :: Text -> Text -> Text -> Text
 node_processor_proc_template =
   inst (T $ "if (processor." % text % " != undefined) { results = processor." % text % "(node as " % text % "); } break;")
+
+-- | Template for evaluate() method
+evaluate_method :: Template (TArray Text -> Text)
+evaluate_method = T $ "evaluate(): string { " % build % " }"
+
+-- | Template for static factory methods
+static_factory_method :: Template (Text -> TArray Text -> Text -> Text -> Text)
+static_factory_method = T $ "static " % text % "(" % commaSep build % "): " % text % " { " % text % now " }"
+
+-- | Template for builder pattern class
+builder_pattern_class :: Template (Text -> TArray Text -> Text)
+builder_pattern_class = T $ "export class " % text % "Builder { " % build % " }"

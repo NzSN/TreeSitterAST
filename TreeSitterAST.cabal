@@ -65,6 +65,7 @@ library
                      Template.TypeScriptTemplate,
                      Fundamentals.File,
                      Fundamentals.Inference,
+                     Fundamentals.Generation,
                      Utility,
                      TypedASTGenerator.NodeProcessorDescription,
                      TypedASTGenerator.NodeDescription,
@@ -89,6 +90,7 @@ library
                       text >= 2.1.2,
                       template-haskell,
                       aeson,
+                      random,
 
     -- Directories containing source files.
     hs-source-dirs:   src
@@ -138,6 +140,7 @@ test-suite TreeSitterAST-test
                    TreeSitterGrammarNodesSpec,
                    ProgBuilderUtilitiesSpec,
                    Fundamentals.InferenceSpec,
+                   Fundamentals.GenerationSpec,
 
     -- LANGUAGE extensions used by modules in this package.
     -- other-extensions:
@@ -163,3 +166,4 @@ test-suite TreeSitterAST-test
         tasty >= 1.5.3,
         tasty-hunit >= 0.10.2,
         text >= 2.1.2,
+        random,

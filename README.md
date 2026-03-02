@@ -7,7 +7,7 @@ A Haskell-based code generator that creates strongly-typed Abstract Syntax Tree 
 TreeSitterAST parses Tree-sitter's `node-types.json` and `grammar.json` files and generates TypeScript code for working with AST nodes. The tool is language-agnostic and can process any Tree-sitter grammar, though the provided sample files are for JavaScript. It provides two main modes:
 
 1. **AST Processor (`--ast-proc`)**: Generates TypeScript class declarations and node processors from `node-types.json`
-2. **Code Generator (`--code-gen`)**: Generates TypeScript classes and grammar representations from `grammar.json`
+2. **Code Generator (`--code-gen`)**: Generates TypeScript classes and grammar representations from `grammar.json`. The generated TypeScript classes is used to generate sentences obey the grammar that specified by grammar.json.
 
 ## Features
 
