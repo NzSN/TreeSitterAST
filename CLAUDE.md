@@ -170,7 +170,36 @@ Key Haskell dependencies (listed in `.cabal` file):
 ## Recent Development Focus
 
 Recent commits have focused on:
-- Inference rules for evaluating grammar nodes into expressions
-- Grammar node traversal (`Traversable` instance)
-- Property conflict resolution during code generation
-- Alias resolution functions
+- **Sentence Generation System**: Complete implementation of `Fundamentals.Generation` with random, guided, and exhaustive strategies for generating sentences from grammar definitions.
+- **Code Generator Enhancements**: `ProgBuilder.ECMA.ProgBuilderForECMA` now generates functional `evaluate()` methods and factory methods (`static createX()`) in TypeScript classes.
+- **New Modules**: Added `ProgBuilder.GenerationDriver` for orchestration and `Validation.Validator` for sentence validation.
+- **Property System**: Enhanced `ProgBuilder.ProgBuilderDescription` with `GenerationHint` type for smarter code generation.
+- **Bug Fixes**: Fixed class name mismatches, parameter formatting, and property reference issues in generated TypeScript code.
+
+## Generated Code Capabilities
+
+The Code Generator (`--code-gen` mode) now produces TypeScript classes that can:
+1. **Generate sentences** via `evaluate()` methods that traverse grammar nodes
+2. **Create instances** via static factory methods (e.g., `static createYield_expression_t()`)
+3. **Handle all grammar constructs**: SEQ (concatenation), CHOICE (alternatives), REPEAT/REPEAT1, SYMBOL (references), FIELD, ALIAS, etc.
+4. **Include string literals** directly in generated output (e.g., `"yield"` in `Yield_expression_T.evaluate()`)
+5. **Support random generation strategy** with configurable depth limits
+
+Example generated class:
+```typescript
+export class Yield_expression_T extends SyntaticInterior {
+  expression_0_i: Expression_T;
+  constructor(expression_0: Expression_T) {
+    super();
+    this.expression_0_i = expression_0;
+  }
+  evaluate(): string {
+    return "yield" + this.expression_0_i.evaluate();
+  }
+  static createYield_expression_t(expression_0: Expression_T): Yield_expression_T {
+    const instance = new Yield_expression_T();
+    instance.expression_0_i = expression_0;
+    return instance;
+  }
+}
+```
