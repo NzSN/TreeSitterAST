@@ -24,10 +24,20 @@ modeParser = astProcFlag <|> codeGenFlag
             <> help "Placeholder for future code generation"
         )
 
-argsParser :: Parser (Mode, FilePath)
-argsParser = (,) <$> modeParser <*> strArgument (metavar "FILE" <> help "Path to node-types.json file")
+outputDirParser :: Parser FilePath
+outputDirParser =
+  strOption
+    ( long "output-dir"
+        <> short 'o'
+        <> metavar "DIR"
+        <> help "Output directory (default: current directory)"
+        <> value "."
+    )
 
-parserInfo :: ParserInfo (Mode, FilePath)
+argsParser :: Parser (Mode, FilePath, FilePath)
+argsParser = (,,) <$> modeParser <*> strArgument (metavar "FILE" <> help "Path to node-types.json file") <*> outputDirParser
+
+parserInfo :: ParserInfo (Mode, FilePath, FilePath)
 parserInfo =
   info
     (argsParser <**> helper)
@@ -36,5 +46,5 @@ parserInfo =
         <> header "TreeSitterAST - Tree-sitter AST code generator"
     )
 
-parseArgs :: IO (Mode, FilePath)
+parseArgs :: IO (Mode, FilePath, FilePath)
 parseArgs = execParser parserInfo

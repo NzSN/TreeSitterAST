@@ -21,6 +21,8 @@ cabal build
 # Run the executable (after building)
 cabal run TreeSitterAST -- --ast-proc sample/node-types.json
 cabal run TreeSitterAST -- --code-gen sample/grammar.json
+# Specify output directory with --output-dir (or -o)
+cabal run TreeSitterAST -- --ast-proc sample/node-types.json --output-dir generated
 
 # Install the executable globally
 cabal install
@@ -48,6 +50,8 @@ cabal repl lib:TreeSitterAST
 # Run the executable with arguments
 cabal run TreeSitterAST -- --ast-proc sample/node-types.json
 cabal run TreeSitterAST -- --code-gen sample/grammar.json
+# Specify output directory with --output-dir (or -o)
+cabal run TreeSitterAST -- --ast-proc sample/node-types.json --output-dir generated
 
 # Clean build artifacts
 cabal clean
@@ -88,7 +92,7 @@ The system is organized into several layers:
 ### 2. Generation Layer
 - **`TypedASTGenerator.NodeDescription`**: Generates `node_declare.ts` – TypeScript class declarations for AST nodes.
 - **`TypedASTGenerator.NodeProcessorDescription`**: Generates `node_processor.ts` – TypeScript node processors for AST traversal.
-- **`ProgBuilder.ECMA.ProgBuilderForECMA`**: Generates `grammar_classes.ts` – TypeScript classes for syntactic nodes derived from grammar.
+- **`ProgBuilder.ECMA.ProgBuilderForECMA`**: Generates `<grammar_name>_rep.ts` – TypeScript classes for syntactic nodes derived from grammar.
 
 ### 3. Template System
 - **`Template.Template`**: Generic template wrapper around `Formatting` library for building reusable code templates.
@@ -115,7 +119,7 @@ The system is organized into several layers:
 3. **Generation**: The generator (`NodeDescription`, `NodeProcessorDescription`, `ProgBuilderForECMA`) walks the parsed structure and applies TypeScript templates.
 4. **Output**: Writes generated files to the current directory:
    - `--ast-proc` mode: `node_declare.ts` and `node_processor.ts`
-   - `--code-gen` mode: `grammar_classes.ts` and `grammar_nodes.txt`
+   - `--code-gen` mode: `<grammar_name>_rep.ts` and `<grammar_name>_grammar.txt` (where `grammar_name` is the `name` field from the grammar.json file)
 
 ## Project Structure
 

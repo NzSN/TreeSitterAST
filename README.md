@@ -51,24 +51,30 @@ cabal install
 
 # Generate grammar-based code from grammar.json
 ./TreeSitterAST --code-gen sample/grammar.json
+
+# Specify output directory with --output-dir (or -o)
+./TreeSitterAST --ast-proc sample/node-types.json --output-dir generated
 ```
 
 ### Command-line Options
 
 - `--ast-proc`: Generate both `node_processor.ts` and `node_declare.ts` from `node-types.json`
-- `--code-gen`: Generate `grammar_nodes.txt` and `grammar_classes.ts` from `grammar.json`
+- `--code-gen`: Generate `<grammar_name>_grammar.txt` and `<grammar_name>_rep.ts` from `grammar.json` (where `<grammar_name>` is the `name` field from the grammar file)
+- `--output-dir` (or `-o`): Output directory (default: current directory)
 
 ### Output Files
+
+By default, files are written to the current directory; use `--output-dir` to change the location.
 
 #### AST Processor Mode (`--ast-proc`)
 - `node_declare.ts`: TypeScript class declarations for AST nodes
 - `node_processor.ts`: TypeScript node processors for AST traversal
 
 #### Code Generator Mode (`--code-gen`)
-- `grammar_nodes.txt`: Text representation of parsed grammar
-- `grammar_classes.ts`: TypeScript classes for syntactic nodes
+- `<grammar_name>_grammar.txt`: Text representation of parsed grammar
+- `<grammar_name>_rep.ts`: TypeScript classes for syntactic nodes
 
-> **Note**: The repository already includes example generated files (`grammar_classes.ts` and `grammar_nodes.txt` in the root directory) from a previous run using the sample grammar.
+> **Note**: Generated files are named based on the grammar's `name` field (e.g., for the JavaScript grammar: `javascript_rep.ts` and `javascript_grammar.txt`).
 
 ## Project Structure
 
@@ -89,8 +95,8 @@ TreeSitterAST/
 ├── sample/                 # Example input files
 │   ├── node-types.json    # Tree-sitter node type definitions (64KB)
 │   └── grammar.json       # Tree-sitter grammar definition (JavaScript, 175KB)
-├── grammar_classes.ts     # Generated output (TypeScript classes)
-├── grammar_nodes.txt      # Generated output (grammar representation)
+├── <grammar_name>_rep.ts          # Generated output (TypeScript classes)
+├── <grammar_name>_grammar.txt      # Generated output (grammar representation)
 ├── README.md              # This documentation file
 ├── LICENSE                # BSD 3-Clause License
 └── TreeSitterAST.cabal    # Haskell package configuration
