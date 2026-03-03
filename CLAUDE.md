@@ -111,6 +111,35 @@ The system is organized into several layers:
 - **`TreeSitterNodes.Node`**: Represents a node from `node-types.json`; either `Leaf NodeInfo` or `Interior NodeInfo Children (Maybe FieldName) (Maybe Precedence)`.
 - **`TreeSitterGrammarNodes.GrammarNode`**: Recursive grammar node type with variants: `Leaf`, `Seq`, `Choice`, `Symbol`, `Repeat`, `Repeat1`, `Optional`, `Field`, `Alias`, `Blank`, `Precedence`, `Immmediate`.
 - **`Grammar`**: Map from symbol names to `GrammarNode`s, plus external rules and precedence sets.
+- **`Property`** (in `ProgBuilderDescription`): Represents extracted properties from grammar nodes - `StrProp`, `SymbolProp`, or `NamedProp` with generation hints.
+- **`Field`** (in `ProgBuilderForECMA`): Represents TypeScript class fields - `Field`, `SumField`, or `EmptyField` with names and types.
+- **`GenerationStrategy`** (in `Fundamentals.Generation`): Controls sentence generation - `RandomStrategy`, `GuidedStrategy`, or `ExhaustiveStrategy`.
+
+## Data Flow Patterns
+
+### AST Processor Mode (`--ast-proc`)
+```
+node-types.json → TreeSitterNodes.parse → [Node] →
+  NodeDescription.generate → node_declare.ts
+  NodeProcessorDescription.generate → node_processor.ts
+```
+
+### Code Generator Mode (`--code-gen`)
+```
+grammar.json → TreeSitterGrammarNodes.parseGrammarFromJSON → Grammar →
+  Fundamentals.Inference.trans (transform CHOICE nodes) →
+  ProgBuilderDescription.propsOfNode (extract properties) →
+  ProgBuilderForECMA.fieldsFromProperties (convert to fields) →
+  ProgBuilderForECMA.build (generate class with evaluate() and factories) →
+  <grammar_name>_rep.ts
+```
+
+### Property to Field Conversion
+The critical conversion happens in `fieldsFromProperties`:
+1. `[Property]` from `propsOfNode` (preserving original order)
+2. Filter out `StrProp` (string literals, no field needed)
+3. Convert remaining to `Field` with sequential suffixes (`_0`, `_1`, etc.)
+4. All generation components use same `[Field]` list for consistency
 
 ## Workflow
 
@@ -176,6 +205,17 @@ Recent commits have focused on:
 - **New Modules**: Added `ProgBuilder.GenerationDriver` for orchestration and `Validation.Validator` for sentence validation.
 - **Property System**: Enhanced `ProgBuilder.ProgBuilderDescription` with `GenerationHint` type for smarter code generation.
 - **Bug Fixes**: Fixed class name mismatches, parameter formatting, and property reference issues in generated TypeScript code.
+- **Field Generation Fix**: Resolved type mismatches in constructor parameters where field names were incorrectly used as types instead of field content types (e.g., `Value_T` vs `Expression_T`).
+
+## Architecture Documents
+
+For detailed architecture understanding, refer to:
+- `SENTENCE_GENERATION_ARCHITECTURE.md` - Overall system design for sentence generation
+- `IMPLEMENTATION_SUMMARY.md` - Complete implementation plan and component breakdown
+- `FIELD_GENERATION_FIX_PROGRESS.md` - Documentation of field generation fixes
+- `CHOICE_REPETITION_HANDLING.md` - Algorithms for choice resolution and repetition
+- `EVALUATE_IMPLEMENTATIONS.md` - Detailed evaluate() method designs
+- `GENERATION_DRIVER_VALIDATION.md` - Driver system and validation infrastructure
 
 ## Generated Code Capabilities
 
@@ -204,4 +244,34 @@ export class Yield_expression_T extends SyntaticInterior {
     return instance;
   }
 }
+
+## Common Issues and Solutions
+
+### Type Mismatches in Constructor Parameters
+**Problem**: Constructor parameters have wrong types (e.g., `Value_T` instead of `Expression_T`).
+**Cause**: Using field name as type instead of field content type.
+**Solution**: Ensure `evalFieldType` extracts content type, not field name. Field nodes should use the type of their content, not the field name.
+
+### Inconsistent Field Naming
+**Problem**: Field declarations, constructor assignments, and evaluate() references use different naming.
+**Cause**: Different components using different indexing logic.
+**Solution**: Use `fieldsFromProperties` as single source of truth for all components.
+
+### String Literal Escaping
+**Problem**: Generated TypeScript has unescaped quotes or backslashes.
+**Solution**: Use `escapeTypeScriptString` in `generateMemberCall` to properly escape `"` as `\"` and `\` as `\\`.
+
+### Property Extraction Issues
+**Problem**: Missing or incorrect properties in generated classes.
+**Debug**: Check `propsOfNode` in `ProgBuilderDescription` to see what properties are extracted from grammar nodes.
+
+### Test Pattern Execution
+**Problem**: Running specific test patterns fails.
+**Solution**: Build first with `cabal build`, then run test binary directly with pattern:
+```bash
+dist-newstyle/build/x86_64-linux/ghc-*/TreeSitterAST-0.1.0.0/t/TreeSitterAST-test/build/TreeSitterAST-test/TreeSitterAST-test -p "PatternName"
+```
+
+### Field Generation Consistency
+**Key Principle**: All generation components (constructor, evaluate(), factory methods) must use the same `[Field]` list from `fieldsFromProperties` to ensure consistent naming and typing.
 ```
