@@ -172,6 +172,7 @@ Key Haskell dependencies (listed in `.cabal` file):
 Recent commits have focused on:
 - **Sentence Generation System**: Complete implementation of `Fundamentals.Generation` with random, guided, and exhaustive strategies for generating sentences from grammar definitions.
 - **Code Generator Enhancements**: `ProgBuilder.ECMA.ProgBuilderForECMA` now generates functional `evaluate()` methods and factory methods (`static createX()`) in TypeScript classes.
+- **String Escaping Fix**: Added proper escaping of special characters in generated TypeScript string literals (double quotes and backslashes).
 - **New Modules**: Added `ProgBuilder.GenerationDriver` for orchestration and `Validation.Validator` for sentence validation.
 - **Property System**: Enhanced `ProgBuilder.ProgBuilderDescription` with `GenerationHint` type for smarter code generation.
 - **Bug Fixes**: Fixed class name mismatches, parameter formatting, and property reference issues in generated TypeScript code.
@@ -183,7 +184,8 @@ The Code Generator (`--code-gen` mode) now produces TypeScript classes that can:
 2. **Create instances** via static factory methods (e.g., `static createYield_expression_t()`)
 3. **Handle all grammar constructs**: SEQ (concatenation), CHOICE (alternatives), REPEAT/REPEAT1, SYMBOL (references), FIELD, ALIAS, etc.
 4. **Include string literals** directly in generated output (e.g., `"yield"` in `Yield_expression_T.evaluate()`)
-5. **Support random generation strategy** with configurable depth limits
+5. **Properly escape special characters** in string literals (double quotes as `\"`, backslashes as `\\`)
+6. **Support random generation strategy** with configurable depth limits
 
 Example generated class:
 ```typescript

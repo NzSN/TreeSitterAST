@@ -141,6 +141,7 @@ test-suite TreeSitterAST-test
                    ProgBuilderUtilitiesSpec,
                    Fundamentals.InferenceSpec,
                    Fundamentals.GenerationSpec,
+                   StringEscapingTest,
 
     -- LANGUAGE extensions used by modules in this package.
     -- other-extensions:

@@ -16,7 +16,6 @@ import Template.TypeScriptTemplate qualified as TTS
 import TreeSitterGrammarNodes (isLeaf)
 import TreeSitterGrammarNodes qualified as TSGN
 import Fundamentals.Inference (trans)
-import Fundamentals.Generation (GenerationStrategy(..), evaluateNode, defaultContext)
 import TypedASTGenerator.NodeDescriptionHelper
 import Utility (upper_the_first_char)
 
@@ -27,14 +26,14 @@ descript grammar =
       transformedGrammar = trans origGrammar
       rules = TSGN.grammarNodes transformedGrammar
       builder_def = Map.foldrWithKey (\name rule acc -> T.concat [acc, build name rule]) "" rules
-   in T.unpack $ T.concat [imports, prologue, builder_def]
+   in T.unpack $ T.concat [prologue, builder_def]
 
-imports :: T.Text
-imports =
-  T.concat [TT.inst
-    TTS.import_statement
-    (TT.TArray ["strict as assert"])
-    "assert", "\n"]
+-- imports :: T.Text
+-- imports =
+--   T.concat [TT.inst
+--     TTS.import_statement
+--     (TT.TArray ["strict as assert"])
+--     "assert", "\n"]
 
 prologue :: T.Text
 prologue =
@@ -66,8 +65,9 @@ prologue =
 build :: String -> TSGN.Node -> T.Text
 build name rule =
   let className = T.pack $ node_type_ident name
-      fields = propsOfNode rule
-      (baseClass, constructorDef, props) =
+      props = propsOfNode rule
+      fields = fieldsFromProperties props
+      (baseClass, constructorDef, fieldDecls) =
         if isLeaf rule
           then
             ( "SyntaticLeaf",
@@ -77,17 +77,17 @@ build name rule =
           else
             ( "SyntaticInterior",
               interiorConstructor fields,
-              Just $ TT.TArray $ collapse' $ propFromTSGNs fields
+              Just $ TT.TArray $ collapse' fields
             )
-      evaluateMethod = if isLeaf rule then "" else generateEvaluateMethod rule fields
-      factoryMethod = generateFactoryMethods (isLeaf rule) (T.unpack className) fields
+      evaluateMethod = if isLeaf rule then "" else generateEvaluateMethod rule fields  -- TODO: change to fields
+      factoryMethod = generateFactoryMethods (isLeaf rule) (T.unpack className) fields  -- TODO: change to fields
       allMethods = [constructorDef] ++
                    (if T.null evaluateMethod then [] else [evaluateMethod]) ++
                    (if T.null factoryMethod then [] else [factoryMethod])
       methods = if null allMethods then Nothing else Just $ TT.TArray allMethods
    in T.concat
         [ TT.inst TTS.export_qualifier $
-            TT.inst TTS.class_declare className (Just baseClass) props methods,
+            TT.inst TTS.class_declare className (Just baseClass) fieldDecls methods,
           "\n"
         ]
   where
@@ -98,52 +98,32 @@ build name rule =
         (TT.TArray [TT.inst TTS.parameter_declare "value" "string"])
         (TT.TArray [TT.inst TTS.function_call "super" (Just $ TT.TArray [TT.inst TTS.var_ref "value"])])
 
-    interiorConstructor :: [Property] -> T.Text
-    interiorConstructor props =
+    interiorConstructor :: [Field] -> T.Text
+    interiorConstructor fields =
       TT.inst
         TTS.const_declare
-        (TT.TArray $ filter (not . T.null) $ map generateConstructorParam $ zip [0..] props)
+        (TT.TArray $ filter (not . T.null) $ map generateConstructorParam fields)
         ( TT.TArray
-            (interiorPrologueStmts ++ filter (not . T.null) (map generateConstructorAssignment (zip [0..] props)))
+            (interiorPrologueStmts ++ filter (not . T.null) (map generateConstructorAssignment fields))
         )
       where
-        generateConstructorParam :: (Int, Property) -> T.Text
-        generateConstructorParam (idx, prop) =
-          case prop of
-            SymbolProp name _ ->
-              let fieldIdx = countNonStrPropsBefore idx props
-              in TT.inst TTS.parameter_declare (T.concat [name, T.pack $ "_" ++ show fieldIdx]) (T.pack $ upper_the_first_char (T.unpack name) ++ "_T")
-            NamedProp name _ _ ->
-              let fieldIdx = countNonStrPropsBefore idx props
-              in TT.inst TTS.parameter_declare (T.concat [name, T.pack $ "_" ++ show fieldIdx]) (T.pack $ upper_the_first_char (T.unpack name) ++ "_T")
-            StrProp _ _ -> ""  -- Skip string literal parameters
-          where
-            countNonStrPropsBefore :: Int -> [Property] -> Int
-            countNonStrPropsBefore targetIdx props' =
-              length $ filter (not . isStrProp) $ take targetIdx props'
+        generateConstructorParam :: Field -> T.Text
+        generateConstructorParam field =
+          case field of
+            Field name _ ->
+              TT.inst TTS.parameter_declare name (evalFieldType field)
+            SumField name _ ->
+              TT.inst TTS.parameter_declare name (evalFieldType field)
+            EmptyField -> ""  -- Skip empty fields
 
-            isStrProp :: Property -> Bool
-            isStrProp (StrProp _ _) = True
-            isStrProp _ = False
-
-        generateConstructorAssignment :: (Int, Property) -> T.Text
-        generateConstructorAssignment (idx, prop) =
-          case prop of
-            SymbolProp name _ ->
-              let fieldIdx = countNonStrPropsBefore idx props
-              in T.concat ["this.", name, T.pack $ "_" ++ show fieldIdx, "_i = ", name, T.pack $ "_" ++ show fieldIdx, ";"]
-            NamedProp name _ _ ->
-              let fieldIdx = countNonStrPropsBefore idx props
-              in T.concat ["this.", name, T.pack $ "_" ++ show fieldIdx, "_i = ", name, T.pack $ "_" ++ show fieldIdx, ";"]
-            StrProp _ _ -> ""  -- Skip string literal assignments
-          where
-            countNonStrPropsBefore :: Int -> [Property] -> Int
-            countNonStrPropsBefore targetIdx props' =
-              length $ filter (not . isStrProp) $ take targetIdx props'
-
-            isStrProp :: Property -> Bool
-            isStrProp (StrProp _ _) = True
-            isStrProp _ = False
+        generateConstructorAssignment :: Field -> T.Text
+        generateConstructorAssignment field =
+          case field of
+            Field name _ ->
+              T.concat ["this.", name, "_i = ", name, ";"]
+            SumField name _ ->
+              T.concat ["this.", name, "_i = ", name, ";"]
+            EmptyField -> ""  -- Skip empty fields
 
     interiorPrologueStmts :: [T.Text]
     interiorPrologueStmts =
@@ -194,143 +174,124 @@ evalFieldType f
 collapse' :: [Field] -> [T.Text]
 collapse' = map (\f -> T.concat [eval f, ";\n"])
 
-propFromTSGNs :: [Property] -> [Field]
-propFromTSGNs = foldl (appendIDX 0) [] . (L.group . L.sort . propFromTSGNs')
-  where
-    appendIDX :: Int -> [Field] -> [Field] -> [Field]
-    appendIDX i r (Field f_name f_type : xs) =
-      Field (modifyFieldName i f_name) f_type : appendIDX (i + 1) [] xs ++ r
-    appendIDX i r (SumField f_name f_types : xs) =
-      SumField (modifyFieldName i f_name) f_types : appendIDX (i + 1) [] xs ++ r
-    appendIDX i r (EmptyField : xs) = appendIDX i [] xs ++ r
-    appendIDX _ _ [] = []
-
-    modifyFieldName :: Int -> T.Text -> T.Text
-    modifyFieldName i t = T.concat [t, T.pack . ("_" ++) . show $ i]
-
-propFromTSGNs' :: [Property] -> [Field]
-propFromTSGNs' = map propFromTSGN
 
 propFromTSGN :: Property -> Field
 propFromTSGN x
   | (SymbolProp p_type _) <- x = Field p_type p_type
   | (StrProp _ _) <- x = EmptyField
-  | (NamedProp p_name p_types _) <- x = do
-      SumField p_name $ map (asTypeStr . propType) p_types
+  | (NamedProp p_name p_types _) <- x = SumField p_name $ map (asTypeStr . propType) p_types
   where
     asTypeStr :: Maybe T.Text -> T.Text
     asTypeStr x'
       | Nothing <- x' = "string"
       | Just s  <- x' = s
 
+isStrProp :: Property -> Bool
+isStrProp (StrProp _ _) = True
+isStrProp _ = False
+
+fieldsFromProperties :: [Property] -> [Field]
+fieldsFromProperties props = go 0 props
+  where
+    go _ [] = []
+    go idx (prop : rest)
+      | isStrProp prop = go idx rest  -- skip string literals, no field
+      | otherwise =
+          let baseField = propFromTSGN prop
+              suffixedField = case baseField of
+                Field name ftype -> Field (T.concat [name, T.pack $ "_" ++ show idx]) ftype
+                SumField name ftypes -> SumField (T.concat [name, T.pack $ "_" ++ show idx]) ftypes
+                EmptyField -> EmptyField  -- shouldn't happen since StrProp already filtered
+          in suffixedField : go (idx + 1) rest
+
 -- | Generate static factory methods for a class
-generateFactoryMethods :: Bool -> String -> [Property] -> T.Text
-generateFactoryMethods isLeafNode className properties =
-  if null properties && not isLeafNode
+generateFactoryMethods :: Bool -> String -> [Field] -> T.Text
+generateFactoryMethods isLeafNode className fields =
+  if null fields && not isLeafNode
     then ""
     else
       let methodName = T.pack $ "create" ++ upper_the_first_char className
-          params = generateFactoryParams isLeafNode properties
-          body = generateFactoryBody isLeafNode className properties
+          params = generateFactoryParams isLeafNode fields
+          body = generateFactoryBody isLeafNode className fields
       in TT.inst TTS.static_factory_method methodName params (T.pack className) body
   where
-    generateFactoryParams :: Bool -> [Property] -> TT.TArray T.Text
-    generateFactoryParams isLeaf props =
-      if isLeaf
-        then TT.TArray [TT.inst TTS.parameter_declare "value" "string"]
-        else TT.TArray $ filter (not . T.null) $ map generateParam $ zip [0..] props
+    generateFactoryParams :: Bool -> [Field] -> TT.TArray T.Text
+    generateFactoryParams isLeaf fields'
+      | isLeaf = TT.TArray [TT.inst TTS.parameter_declare "value" "string"]
+      | otherwise = TT.TArray $ filter (not . T.null) $ map generateParam fields'
       where
-        generateParam :: (Int, Property) -> T.Text
-        generateParam (idx, prop) =
-          case prop of
-            SymbolProp name _ ->
-              let fieldIdx = countNonStrPropsBefore idx props
-              in TT.inst TTS.parameter_declare (T.concat [name, T.pack $ "_" ++ show fieldIdx]) (T.pack $ upper_the_first_char (T.unpack name) ++ "_T")
-            NamedProp name _ _ ->
-              let fieldIdx = countNonStrPropsBefore idx props
-              in TT.inst TTS.parameter_declare (T.concat [name, T.pack $ "_" ++ show fieldIdx]) (T.pack $ upper_the_first_char (T.unpack name) ++ "_T")
-            StrProp _ _ -> ""  -- Skip string literal parameters
-          where
-            countNonStrPropsBefore :: Int -> [Property] -> Int
-            countNonStrPropsBefore targetIdx props' =
-              length $ filter (not . isStrProp) $ take targetIdx props'
+        generateParam :: Field -> T.Text
+        generateParam field =
+          case field of
+            Field {} -> TT.inst TTS.parameter_declare (field_name field) (evalFieldType field)
+            SumField {} -> TT.inst TTS.parameter_declare (field_name field) (evalFieldType field)
+            EmptyField -> ""
 
-            isStrProp :: Property -> Bool
-            isStrProp (StrProp _ _) = True
-            isStrProp _ = False
-
-    generateFactoryBody :: Bool -> String -> [Property] -> T.Text
-    generateFactoryBody isLeaf clsName props =
-      if isLeaf
-        then
+    generateFactoryBody :: Bool -> String -> [Field] -> T.Text
+    generateFactoryBody isLeaf clsName fields'
+      | isLeaf =
           let instanceVar = T.pack $ "return new " ++ clsName ++ "(value);"
           in T.concat [instanceVar, "\n"]
-        else
-          let instanceVar = T.pack $ "const instance = new " ++ clsName ++ "();"
-              assignments = filter (not . T.null) $ map generateAssignment $ zip [0..] props
+      | otherwise =
+          let paramNames = filter (not . T.null) $ map fieldName fields'
+              paramList = T.intercalate ", " paramNames
+              instanceVar = T.pack $ "const instance = new " ++ clsName ++ "(" ++ T.unpack paramList ++ ");"
               returnStmt = T.pack $ "return instance;"
-              stmts = instanceVar : assignments ++ [returnStmt]
+              stmts = [instanceVar, returnStmt]
           in T.concat $ map (\s -> T.concat [s, "\n"]) stmts
       where
-        generateAssignment :: (Int, Property) -> T.Text
-        generateAssignment (idx, prop) =
-          case prop of
-            SymbolProp name _ ->
-              let fieldIdx = countNonStrPropsBefore idx props
-              in T.concat ["instance.", name, T.pack $ "_" ++ show fieldIdx, "_i = ", name, T.pack $ "_" ++ show fieldIdx, ";"]
-            NamedProp name _ _ ->
-              let fieldIdx = countNonStrPropsBefore idx props
-              in T.concat ["instance.", name, T.pack $ "_" ++ show fieldIdx, "_i = ", name, T.pack $ "_" ++ show fieldIdx, ";"]
-            StrProp _ _ -> ""  -- Skip string literal assignments
-          where
-            countNonStrPropsBefore :: Int -> [Property] -> Int
-            countNonStrPropsBefore targetIdx props' =
-              length $ filter (not . isStrProp) $ take targetIdx props'
-
-            isStrProp :: Property -> Bool
-            isStrProp (StrProp _ _) = True
-            isStrProp _ = False
+        fieldName :: Field -> T.Text
+        fieldName (Field name _) = name
+        fieldName (SumField name _) = name
+        fieldName EmptyField = ""
 
 -- | Generate evaluate() method for a grammar node
-generateEvaluateMethod :: TSGN.Node -> [Property] -> T.Text
-generateEvaluateMethod node properties =
+generateEvaluateMethod :: TSGN.Node -> [Field] -> T.Text
+generateEvaluateMethod node fields =
   case node of
-    TSGN.Seq members -> generateSeqEvaluate members properties
-    TSGN.Choice alternatives -> generateChoiceEvaluate alternatives properties
-    TSGN.Repeat content -> generateRepeatEvaluate content properties
-    TSGN.Repeat1 content -> generateRepeat1Evaluate content properties
-    TSGN.Symbol name -> generateSymbolEvaluate name properties
+    TSGN.Seq members -> generateSeqEvaluate members fields
+    TSGN.Choice alternatives -> generateChoiceEvaluate alternatives fields
+    TSGN.Repeat content -> generateRepeatEvaluate content fields
+    TSGN.Repeat1 content -> generateRepeat1Evaluate content fields
+    TSGN.Symbol name -> generateSymbolEvaluate name fields
     TSGN.StringLiteral _ -> generateLiteralEvaluate
     TSGN.Pattern _ -> generateLiteralEvaluate
     TSGN.Blank -> generateBlankEvaluate
-    TSGN.Field _ content -> generateEvaluateMethod content properties
-    TSGN.Alias content _ _ -> generateEvaluateMethod content properties
-    TSGN.Token content -> generateEvaluateMethod content properties
-    TSGN.ImmediateToken content -> generateEvaluateMethod content properties
-    TSGN.Prec _ content -> generateEvaluateMethod content properties
-    TSGN.PrecLeft _ content -> generateEvaluateMethod content properties
-    TSGN.PrecRight _ content -> generateEvaluateMethod content properties
-    TSGN.PrecDynamic _ content -> generateEvaluateMethod content properties
-    TSGN.Reserved content _ -> generateEvaluateMethod content properties
+    TSGN.Field _ content -> generateEvaluateMethod content fields
+    TSGN.Alias content _ _ -> generateEvaluateMethod content fields
+    TSGN.Token content -> generateEvaluateMethod content fields
+    TSGN.ImmediateToken content -> generateEvaluateMethod content fields
+    TSGN.Prec _ content -> generateEvaluateMethod content fields
+    TSGN.PrecLeft _ content -> generateEvaluateMethod content fields
+    TSGN.PrecRight _ content -> generateEvaluateMethod content fields
+    TSGN.PrecDynamic _ content -> generateEvaluateMethod content fields
+    TSGN.Reserved content _ -> generateEvaluateMethod content fields
     TSGN.Empty -> generateEmptyEvaluate
   where
     -- Generate evaluate() for SEQ nodes: concatenate children results
-    generateSeqEvaluate :: [TSGN.Node] -> [Property] -> T.Text
-    generateSeqEvaluate members props =
-      let childCalls = map (generateMemberCall props) (zip [0..] members)
+    generateSeqEvaluate :: [TSGN.Node] -> [Field] -> T.Text
+    generateSeqEvaluate members fields =
+      let childCalls = map (generateMemberCall fields) (zip [0..] members)
           joinedCalls = T.intercalate " + " childCalls
       in TT.inst TTS.evaluate_method (TT.TArray [T.concat ["return ", joinedCalls, ";"]])
       where
-        generateMemberCall :: [Property] -> (Int, TSGN.Node) -> T.Text
-        generateMemberCall props' (idx, member) =
+        -- Escape a string for use in TypeScript double-quoted string literal
+        escapeTypeScriptString :: T.Text -> T.Text
+        escapeTypeScriptString s = T.concatMap escapeChar s
+          where
+            escapeChar '"' = "\\\""
+            escapeChar '\\' = "\\\\"
+            escapeChar c = T.singleton c
+
+        generateMemberCall :: [Field] -> (Int, TSGN.Node) -> T.Text
+        generateMemberCall fields'' (idx, member) =
           case member of
-            TSGN.StringLiteral s -> T.concat ["\"", s, "\""]
-            TSGN.Pattern s -> T.concat ["\"", s, "\""]
+            TSGN.StringLiteral s -> T.concat ["\"", escapeTypeScriptString s, "\""]
+            TSGN.Pattern s -> T.concat ["\"", escapeTypeScriptString s, "\""]
             _ ->
-              let propIdx = countNonStringMembersBefore idx members
-                  actualIdx = getNthNonStrPropIndex propIdx props'
-              in if actualIdx < length props'
-                 then T.concat ["this.", getPropertyName actualIdx props', ".evaluate()"]
+              let fieldIdx = countNonStringMembersBefore idx members
+              in if fieldIdx < length fields''
+                 then T.concat ["this.", evalFieldName (fields'' !! fieldIdx), ".evaluate()"]
                  else T.concat ["this.unknown.evaluate()"]  -- Shouldn't happen
 
         getNthNonStrPropIndex :: Int -> [Property] -> Int
@@ -352,29 +313,37 @@ generateEvaluateMethod node properties =
         isStringMember _ = False
 
     -- Generate evaluate() for CHOICE nodes: need to handle choice resolution
-    generateChoiceEvaluate :: [TSGN.Node] -> [Property] -> T.Text
-    generateChoiceEvaluate alternatives props =
+    generateChoiceEvaluate :: [TSGN.Node] -> [Field] -> T.Text
+    generateChoiceEvaluate alternatives fields' =
       let -- For now, just evaluate the first alternative
-          childCall = T.concat ["this.", getPropertyName 0 props, ".evaluate()"]
+          childCall = if not (null fields')
+                      then T.concat ["this.", evalFieldName (head fields'), ".evaluate()"]
+                      else T.concat ["this.unknown.evaluate()"]
       in TT.inst TTS.evaluate_method (TT.TArray [T.concat ["return ", childCall, ";"]])
 
     -- Generate evaluate() for REPEAT nodes: generate 0-n repetitions
-    generateRepeatEvaluate :: TSGN.Node -> [Property] -> T.Text
-    generateRepeatEvaluate content props =
-      let childCall = T.concat ["this.", getPropertyName 0 props, ".evaluate()"]
+    generateRepeatEvaluate :: TSGN.Node -> [Field] -> T.Text
+    generateRepeatEvaluate content fields' =
+      let childCall = if not (null fields')
+                      then T.concat ["this.", evalFieldName (head fields'), ".evaluate()"]
+                      else T.concat ["this.unknown.evaluate()"]
           -- Simple implementation: just evaluate once for now
       in TT.inst TTS.evaluate_method (TT.TArray [T.concat ["return ", childCall, ";"]])
 
     -- Generate evaluate() for REPEAT1 nodes: generate 1-n repetitions
-    generateRepeat1Evaluate :: TSGN.Node -> [Property] -> T.Text
-    generateRepeat1Evaluate content props =
-      let childCall = T.concat ["this.", getPropertyName 0 props, ".evaluate()"]
+    generateRepeat1Evaluate :: TSGN.Node -> [Field] -> T.Text
+    generateRepeat1Evaluate content fields' =
+      let childCall = if not (null fields')
+                      then T.concat ["this.", evalFieldName (head fields'), ".evaluate()"]
+                      else T.concat ["this.unknown.evaluate()"]
       in TT.inst TTS.evaluate_method (TT.TArray [T.concat ["return ", childCall, ";"]])
 
     -- Generate evaluate() for SYMBOL nodes: delegate to referenced class
-    generateSymbolEvaluate :: T.Text -> [Property] -> T.Text
-    generateSymbolEvaluate name props =
-      let childCall = T.concat ["this.", getPropertyName 0 props, ".evaluate()"]
+    generateSymbolEvaluate :: T.Text -> [Field] -> T.Text
+    generateSymbolEvaluate name fields' =
+      let childCall = if not (null fields')
+                      then T.concat ["this.", evalFieldName (head fields'), ".evaluate()"]
+                      else T.concat ["this.unknown.evaluate()"]
       in TT.inst TTS.evaluate_method (TT.TArray [T.concat ["return ", childCall, ";"]])
 
     -- Generate evaluate() for literal nodes: return value
@@ -393,29 +362,31 @@ generateEvaluateMethod node properties =
       TT.inst TTS.evaluate_method (TT.TArray ["return \"\";"])
 
     -- Helper to get property name by index (with _i suffix)
-    getPropertyName :: Int -> [Property] -> T.Text
-    getPropertyName idx props =
-      if idx < length props
-        then case props !! idx of
-          SymbolProp name _ ->
-            let fieldIdx = countNonStrPropsBefore idx props
-            in T.concat [name, T.pack $ "_" ++ show fieldIdx, "_i"]
-          NamedProp name _ _ ->
-            let fieldIdx = countNonStrPropsBefore idx props
-            in T.concat [name, T.pack $ "_" ++ show fieldIdx, "_i"]
-          StrProp _ _ -> "value_"
-        else "unknown"
-      where
-        countNonStrPropsBefore :: Int -> [Property] -> Int
-        countNonStrPropsBefore targetIdx props' =
-          length $ filter (not . isStrProp) $ take targetIdx props'
-
-        isStrProp :: Property -> Bool
-        isStrProp (StrProp _ _) = True
-        isStrProp _ = False
 
 -- | ECMA Knowledge
 isBuiltin :: T.Text -> Bool
 isBuiltin x
   | x == "string" = True
   | otherwise = False
+
+-- | Get TypeScript type string for a Property
+propertyTypeStr :: Property -> T.Text
+propertyTypeStr prop = case prop of
+  SymbolProp name _ ->
+    T.pack $ upper_the_first_char (T.unpack name) ++ "_T"
+  NamedProp _ p_types _ ->
+    let types = map (asTypeStr . propType) p_types
+        typeStrs = nub $ map typeShow types
+    in if null typeStrs
+        then "undefined"
+        else T.pack $ L.intercalate " | " typeStrs
+  StrProp _ _ -> "string"
+  where
+    asTypeStr :: Maybe T.Text -> T.Text
+    asTypeStr Nothing = "string"
+    asTypeStr (Just s) = s
+
+    typeShow :: T.Text -> String
+    typeShow x = if isBuiltin x
+                  then T.unpack x
+                  else (++ "_T") . upper_the_first_char . T.unpack $ x
