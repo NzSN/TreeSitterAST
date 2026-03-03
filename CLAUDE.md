@@ -206,6 +206,7 @@ Recent commits have focused on:
 - **Property System**: Enhanced `ProgBuilder.ProgBuilderDescription` with `GenerationHint` type for smarter code generation.
 - **Bug Fixes**: Fixed class name mismatches, parameter formatting, and property reference issues in generated TypeScript code.
 - **Field Generation Fix**: Resolved type mismatches in constructor parameters where field names were incorrectly used as types instead of field content types (e.g., `Value_T` vs `Expression_T`).
+- **Union Type Evaluate Fix**: Added type checking for string types in union types within `evaluate()` methods (e.g., `Identifier_T | string | _destructuring_pattern_T`).
 
 ## Architecture Documents
 
@@ -213,6 +214,7 @@ For detailed architecture understanding, refer to:
 - `SENTENCE_GENERATION_ARCHITECTURE.md` - Overall system design for sentence generation
 - `IMPLEMENTATION_SUMMARY.md` - Complete implementation plan and component breakdown
 - `FIELD_GENERATION_FIX_PROGRESS.md` - Documentation of field generation fixes
+- `UNION_TYPE_EVALUATE_FIX.md` - Fix for string type handling in evaluate() methods
 - `CHOICE_REPETITION_HANDLING.md` - Algorithms for choice resolution and repetition
 - `EVALUATE_IMPLEMENTATIONS.md` - Detailed evaluate() method designs
 - `GENERATION_DRIVER_VALIDATION.md` - Driver system and validation infrastructure
@@ -271,6 +273,12 @@ export class Yield_expression_T extends SyntaticInterior {
 ```bash
 dist-newstyle/build/x86_64-linux/ghc-*/TreeSitterAST-0.1.0.0/t/TreeSitterAST-test/build/TreeSitterAST-test/TreeSitterAST-test -p "PatternName"
 ```
+
+### Union Type Evaluate Issues
+**Problem**: `evaluate()` method tries to call `.evaluate()` on string values in union types (e.g., `Identifier_T | string | _destructuring_pattern_T`).
+**Cause**: Generated code doesn't check type before calling `.evaluate()`.
+**Solution**: Use `evalFieldExpr` which generates type checking: `(typeof this.field === 'string' ? this.field : this.field.evaluate())`.
+**Reference**: See `UNION_TYPE_EVALUATE_FIX.md` for detailed implementation.
 
 ### Field Generation Consistency
 **Key Principle**: All generation components (constructor, evaluate(), factory methods) must use the same `[Field]` list from `fieldsFromProperties` to ensure consistent naming and typing.

@@ -268,6 +268,30 @@ generateEvaluateMethod node fields =
     TSGN.Reserved content _ -> generateEvaluateMethod content fields
     TSGN.Empty -> generateEmptyEvaluate
   where
+    -- Get list of types in a field
+    fieldTypes :: Field -> [T.Text]
+    fieldTypes (Field _ t) = [t]
+    fieldTypes (SumField _ ts) = ts
+    fieldTypes EmptyField = []
+
+    -- Check if a field contains string type
+    fieldContainsString :: Field -> Bool
+    fieldContainsString = L.any (== "string") . fieldTypes
+
+    -- Check if a field contains only string type (no other types)
+    fieldIsOnlyString :: Field -> Bool
+    fieldIsOnlyString field = evalFieldType field == "string"
+
+    -- Generate expression to evaluate a field (handles string union types)
+    evalFieldExpr :: Field -> T.Text
+    evalFieldExpr field =
+      let fieldName = evalFieldName field
+      in if fieldContainsString field
+         then if fieldIsOnlyString field
+              then T.concat ["this.", fieldName]
+              else T.concat ["(typeof this.", fieldName, " === 'string' ? this.", fieldName, " : this.", fieldName, ".evaluate())"]
+         else T.concat ["this.", fieldName, ".evaluate()"]
+
     -- Generate evaluate() for SEQ nodes: concatenate children results
     generateSeqEvaluate :: [TSGN.Node] -> [Field] -> T.Text
     generateSeqEvaluate members fields =
@@ -283,6 +307,7 @@ generateEvaluateMethod node fields =
             escapeChar '\\' = "\\\\"
             escapeChar c = T.singleton c
 
+
         generateMemberCall :: [Field] -> (Int, TSGN.Node) -> T.Text
         generateMemberCall fields'' (idx, member) =
           case member of
@@ -291,7 +316,7 @@ generateEvaluateMethod node fields =
             _ ->
               let fieldIdx = countNonStringMembersBefore idx members
               in if fieldIdx < length fields''
-                 then T.concat ["this.", evalFieldName (fields'' !! fieldIdx), ".evaluate()"]
+                 then evalFieldExpr (fields'' !! fieldIdx)
                  else T.concat ["this.unknown.evaluate()"]  -- Shouldn't happen
 
         getNthNonStrPropIndex :: Int -> [Property] -> Int
@@ -317,7 +342,7 @@ generateEvaluateMethod node fields =
     generateChoiceEvaluate alternatives fields' =
       let -- For now, just evaluate the first alternative
           childCall = if not (null fields')
-                      then T.concat ["this.", evalFieldName (head fields'), ".evaluate()"]
+                      then evalFieldExpr (head fields')
                       else T.concat ["this.unknown.evaluate()"]
       in TT.inst TTS.evaluate_method (TT.TArray [T.concat ["return ", childCall, ";"]])
 
@@ -325,7 +350,7 @@ generateEvaluateMethod node fields =
     generateRepeatEvaluate :: TSGN.Node -> [Field] -> T.Text
     generateRepeatEvaluate content fields' =
       let childCall = if not (null fields')
-                      then T.concat ["this.", evalFieldName (head fields'), ".evaluate()"]
+                      then evalFieldExpr (head fields')
                       else T.concat ["this.unknown.evaluate()"]
           -- Simple implementation: just evaluate once for now
       in TT.inst TTS.evaluate_method (TT.TArray [T.concat ["return ", childCall, ";"]])
@@ -334,7 +359,7 @@ generateEvaluateMethod node fields =
     generateRepeat1Evaluate :: TSGN.Node -> [Field] -> T.Text
     generateRepeat1Evaluate content fields' =
       let childCall = if not (null fields')
-                      then T.concat ["this.", evalFieldName (head fields'), ".evaluate()"]
+                      then evalFieldExpr (head fields')
                       else T.concat ["this.unknown.evaluate()"]
       in TT.inst TTS.evaluate_method (TT.TArray [T.concat ["return ", childCall, ";"]])
 
@@ -342,7 +367,7 @@ generateEvaluateMethod node fields =
     generateSymbolEvaluate :: T.Text -> [Field] -> T.Text
     generateSymbolEvaluate name fields' =
       let childCall = if not (null fields')
-                      then T.concat ["this.", evalFieldName (head fields'), ".evaluate()"]
+                      then evalFieldExpr (head fields')
                       else T.concat ["this.unknown.evaluate()"]
       in TT.inst TTS.evaluate_method (TT.TArray [T.concat ["return ", childCall, ";"]])
 
