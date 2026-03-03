@@ -1,2 +1,6 @@
 dist-newstyle
 TAGS
+tmp*
+sample/*
+test_*
+agent_coordination
