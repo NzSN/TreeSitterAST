@@ -63,9 +63,7 @@ library
                      TreeSitterGrammarNodes,
                      Template.Template,
                      Template.TypeScriptTemplate,
-                     Fundamentals.File,
                      Fundamentals.Inference,
-                     Fundamentals.Generation,
                      Utility,
                      TypedASTGenerator.NodeProcessorDescription,
                      TypedASTGenerator.NodeDescription,
@@ -75,7 +73,6 @@ library
 
 
     -- Modules included in this library but not exported.
-    -- other-modules: Template.TypeScriptTemplate
 
     -- LANGUAGE extensions used by modules in this package.
     -- other-extensions:
@@ -142,6 +139,8 @@ test-suite TreeSitterAST-test
                    Fundamentals.InferenceSpec,
                    Fundamentals.GenerationSpec,
                    StringEscapingTest,
+                   Fundamentals.File,
+                   Fundamentals.Generation,
 
     -- LANGUAGE extensions used by modules in this package.
     -- other-extensions:
@@ -161,6 +160,7 @@ test-suite TreeSitterAST-test
         TreeSitterAST,
         bytestring,
         transformers >= 0.6.1.2,
+        mtl,
         containers,
         HUnit >= 1.6.2.0,
         QuickCheck >= 2.15.0.1,

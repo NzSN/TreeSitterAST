@@ -1,4 +1,3 @@
-{-# LANGUAGE KindSignatures #-}
 {-# LANGUAGE MultilineStrings #-}
 {-# LANGUAGE OverloadedStrings #-}
 
@@ -292,6 +291,10 @@ generateEvaluateMethod node fields =
               else T.concat ["(typeof this.", fieldName, " === 'string' ? this.", fieldName, " : this.", fieldName, ".evaluate())"]
          else T.concat ["this.", fieldName, ".evaluate()"]
 
+    -- Helper to generate a throw statement for evaluation errors
+    throwEvaluationError :: T.Text -> T.Text
+    throwEvaluationError msg = T.concat ["throw new Error(\"", msg, "\");"]
+
     -- Generate evaluate() for SEQ nodes: concatenate children results
     generateSeqEvaluate :: [TSGN.Node] -> [Field] -> T.Text
     generateSeqEvaluate members fields =
@@ -317,16 +320,8 @@ generateEvaluateMethod node fields =
               let fieldIdx = countNonStringMembersBefore idx members
               in if fieldIdx < length fields''
                  then evalFieldExpr (fields'' !! fieldIdx)
-                 else T.concat ["this.unknown.evaluate()"]  -- Shouldn't happen
+                 else T.concat ["throw new Error(\"Internal error: field index out of bounds for SEQ node\");"]  -- Shouldn't happen
 
-        getNthNonStrPropIndex :: Int -> [Property] -> Int
-        getNthNonStrPropIndex n props'' =
-          let nonStrIndices = map fst $ filter (\(_, p) -> not (isStrProp' p)) (zip [0..] props'')
-          in if n < length nonStrIndices then nonStrIndices !! n else length props''  -- Fallback
-
-        isStrProp' :: Property -> Bool
-        isStrProp' (StrProp _ _) = True
-        isStrProp' _ = False
 
         countNonStringMembersBefore :: Int -> [TSGN.Node] -> Int
         countNonStringMembersBefore targetIdx members' =
@@ -339,11 +334,11 @@ generateEvaluateMethod node fields =
 
     -- Generate evaluate() for CHOICE nodes: need to handle choice resolution
     generateChoiceEvaluate :: [TSGN.Node] -> [Field] -> T.Text
-    generateChoiceEvaluate alternatives fields' =
+    generateChoiceEvaluate _alternatives fields' =
       let -- For now, just evaluate the first alternative
           childCall = if not (null fields')
                       then evalFieldExpr (head fields')
-                      else T.concat ["this.unknown.evaluate()"]
+                      else T.concat ["throw new Error(\"Cannot evaluate CHOICE node: no field available\");"]
       in TT.inst TTS.evaluate_method (TT.TArray [T.concat ["return ", childCall, ";"]])
 
     -- Generate evaluate() for REPEAT nodes: generate 0-n repetitions
@@ -351,7 +346,7 @@ generateEvaluateMethod node fields =
     generateRepeatEvaluate content fields' =
       let childCall = if not (null fields')
                       then evalFieldExpr (head fields')
-                      else T.concat ["this.unknown.evaluate()"]
+                      else T.concat ["throw new Error(\"Cannot evaluate REPEAT node: no field available\");"]
           -- Simple implementation: just evaluate once for now
       in TT.inst TTS.evaluate_method (TT.TArray [T.concat ["return ", childCall, ";"]])
 
@@ -360,15 +355,15 @@ generateEvaluateMethod node fields =
     generateRepeat1Evaluate content fields' =
       let childCall = if not (null fields')
                       then evalFieldExpr (head fields')
-                      else T.concat ["this.unknown.evaluate()"]
+                      else T.concat ["throw new Error(\"Cannot evaluate REPEAT1 node: no field available\");"]
       in TT.inst TTS.evaluate_method (TT.TArray [T.concat ["return ", childCall, ";"]])
 
     -- Generate evaluate() for SYMBOL nodes: delegate to referenced class
     generateSymbolEvaluate :: T.Text -> [Field] -> T.Text
-    generateSymbolEvaluate name fields' =
+    generateSymbolEvaluate _name fields' =
       let childCall = if not (null fields')
                       then evalFieldExpr (head fields')
-                      else T.concat ["this.unknown.evaluate()"]
+                      else T.concat ["throw new Error(\"Cannot evaluate SYMBOL node: no field available\");"]
       in TT.inst TTS.evaluate_method (TT.TArray [T.concat ["return ", childCall, ";"]])
 
     -- Generate evaluate() for literal nodes: return value

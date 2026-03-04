@@ -202,7 +202,6 @@ Recent commits have focused on:
 - **Sentence Generation System**: Complete implementation of `Fundamentals.Generation` with random, guided, and exhaustive strategies for generating sentences from grammar definitions.
 - **Code Generator Enhancements**: `ProgBuilder.ECMA.ProgBuilderForECMA` now generates functional `evaluate()` methods and factory methods (`static createX()`) in TypeScript classes.
 - **String Escaping Fix**: Added proper escaping of special characters in generated TypeScript string literals (double quotes and backslashes).
-- **New Modules**: Added `ProgBuilder.GenerationDriver` for orchestration and `Validation.Validator` for sentence validation.
 - **Property System**: Enhanced `ProgBuilder.ProgBuilderDescription` with `GenerationHint` type for smarter code generation.
 - **Bug Fixes**: Fixed class name mismatches, parameter formatting, and property reference issues in generated TypeScript code.
 - **Field Generation Fix**: Resolved type mismatches in constructor parameters where field names were incorrectly used as types instead of field content types (e.g., `Value_T` vs `Expression_T`).
