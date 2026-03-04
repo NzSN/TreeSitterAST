@@ -7,8 +7,8 @@ import Data.List as L
 import Data.Map qualified as Map
 import Data.Text.Lazy qualified as T
 import ProgBuilder.ProgBuilderDescription
-  ( Property (..),
-    propsOfNode, propType,
+  ( Property,
+    propsOfNode,
   )
 import Template.Template qualified as TT
 import Template.TypeScriptTemplate qualified as TTS
@@ -16,7 +16,9 @@ import TreeSitterGrammarNodes (isLeaf)
 import TreeSitterGrammarNodes qualified as TSGN
 import Fundamentals.Inference (trans)
 import TypedASTGenerator.NodeDescriptionHelper
-import Utility (upper_the_first_char)
+import Utility (upper_the_first_char, escapeTypeScriptString)
+import ProgBuilder.Types (Field(..))
+import ProgBuilder.FieldConversion (fieldsFromProperties, evalFieldName, evalFieldType)
 
 descript :: TSGN.Grammar -> String
 descript grammar =
@@ -128,12 +130,6 @@ build name rule =
     interiorPrologueStmts =
       [TT.inst TTS.function_call "super" Nothing]
 
--- | Represent a property field of a Javascript class.
-data Field
-  = Field {field_name :: T.Text, field_type :: T.Text}
-  | SumField {field_name :: T.Text, field_types :: [T.Text]}
-  | EmptyField
-  deriving (Show, Eq, Ord)
 
 eval :: Field -> T.Text
 eval f
@@ -143,65 +139,15 @@ eval f
   where
     evaluate field = T.concat [evalFieldName field, " : ", evalFieldType field]
 
-evalFieldName :: Field -> T.Text
-evalFieldName f
-  | (Field f_name _) <- f = T.concat [f_name, "_i"]
-  | (SumField f_name _) <- f = T.concat [f_name, "_i"]
-  | EmptyField <- f = ""
 
-evalFieldType :: Field -> T.Text
-evalFieldType f
-  | (Field _ f_type) <- f =
-      T.pack $ upper_the_first_char (T.unpack f_type) ++ "_T"
-  | field@(SumField _ _) <- f = collapseSumType field
-  | EmptyField <- f = ""
-  where
-    collapseSumType :: Field -> T.Text
-    collapseSumType (SumField _ []) = T.pack "undefined"
-    collapseSumType (SumField _ types) =
-      T.pack $ L.intercalate " | " $
-        nub $ map typeShow types
-    -- Unreachable
-    collapseSumType _ = undefined
-
-    typeShow :: T.Text -> String
-    typeShow x = if isBuiltin x
-                  then T.unpack x
-                  else (++ "_T") . upper_the_first_char . T.unpack $ x
 
 
 collapse' :: [Field] -> [T.Text]
 collapse' = map (\f -> T.concat [eval f, ";\n"])
 
 
-propFromTSGN :: Property -> Field
-propFromTSGN x
-  | (SymbolProp p_type _) <- x = Field p_type p_type
-  | (StrProp _ _) <- x = EmptyField
-  | (NamedProp p_name p_types _) <- x = SumField p_name $ map (asTypeStr . propType) p_types
-  where
-    asTypeStr :: Maybe T.Text -> T.Text
-    asTypeStr x'
-      | Nothing <- x' = "string"
-      | Just s  <- x' = s
 
-isStrProp :: Property -> Bool
-isStrProp (StrProp _ _) = True
-isStrProp _ = False
 
-fieldsFromProperties :: [Property] -> [Field]
-fieldsFromProperties props = go 0 props
-  where
-    go _ [] = []
-    go idx (prop : rest)
-      | isStrProp prop = go idx rest  -- skip string literals, no field
-      | otherwise =
-          let baseField = propFromTSGN prop
-              suffixedField = case baseField of
-                Field name ftype -> Field (T.concat [name, T.pack $ "_" ++ show idx]) ftype
-                SumField name ftypes -> SumField (T.concat [name, T.pack $ "_" ++ show idx]) ftypes
-                EmptyField -> EmptyField  -- shouldn't happen since StrProp already filtered
-          in suffixedField : go (idx + 1) rest
 
 -- | Generate static factory methods for a class
 generateFactoryMethods :: Bool -> String -> [Field] -> T.Text
@@ -314,13 +260,6 @@ generateEvaluateMethod node fields =
          else let joinedCalls = T.intercalate " + " childCalls
               in TT.inst TTS.evaluate_method (TT.TArray [T.concat ["return ", joinedCalls, ";"]])
       where
-        -- Escape a string for use in TypeScript double-quoted string literal
-        escapeTypeScriptString :: T.Text -> T.Text
-        escapeTypeScriptString s = T.concatMap escapeChar s
-          where
-            escapeChar '"' = "\\\""
-            escapeChar '\\' = "\\\\"
-            escapeChar c = T.singleton c
 
 
         generateMemberCall :: [Field] -> (Int, TSGN.Node) -> T.Text
@@ -406,30 +345,3 @@ generateEvaluateMethod node fields =
 
     -- Helper to get property name by index (with _i suffix)
 
--- | ECMA Knowledge
-isBuiltin :: T.Text -> Bool
-isBuiltin x
-  | x == "string" = True
-  | otherwise = False
-
--- | Get TypeScript type string for a Property
-propertyTypeStr :: Property -> T.Text
-propertyTypeStr prop = case prop of
-  SymbolProp name _ ->
-    T.pack $ upper_the_first_char (T.unpack name) ++ "_T"
-  NamedProp _ p_types _ ->
-    let types = map (asTypeStr . propType) p_types
-        typeStrs = nub $ map typeShow types
-    in if null typeStrs
-        then "undefined"
-        else T.pack $ L.intercalate " | " typeStrs
-  StrProp _ _ -> "string"
-  where
-    asTypeStr :: Maybe T.Text -> T.Text
-    asTypeStr Nothing = "string"
-    asTypeStr (Just s) = s
-
-    typeShow :: T.Text -> String
-    typeShow x = if isBuiltin x
-                  then T.unpack x
-                  else (++ "_T") . upper_the_first_char . T.unpack $ x
