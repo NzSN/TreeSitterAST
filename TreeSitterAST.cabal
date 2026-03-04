@@ -133,14 +133,10 @@ test-suite TreeSitterAST-test
 
     -- Modules included in this executable, other than Main.
     other-modules: Template.TypeScriptTemplateSpec,
-                   Fundamentals.FileSpec,
                    TreeSitterGrammarNodesSpec,
                    ProgBuilderUtilitiesSpec,
                    Fundamentals.InferenceSpec,
-                   Fundamentals.GenerationSpec,
                    StringEscapingTest,
-                   Fundamentals.File,
-                   Fundamentals.Generation,
 
     -- LANGUAGE extensions used by modules in this package.
     -- other-extensions:

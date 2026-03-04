@@ -284,23 +284,35 @@ generateEvaluateMethod node fields =
     -- Generate expression to evaluate a field (handles string union types)
     evalFieldExpr :: Field -> T.Text
     evalFieldExpr field =
-      let fieldName = evalFieldName field
-      in if fieldContainsString field
-         then if fieldIsOnlyString field
-              then T.concat ["this.", fieldName]
-              else T.concat ["(typeof this.", fieldName, " === 'string' ? this.", fieldName, " : this.", fieldName, ".evaluate())"]
-         else T.concat ["this.", fieldName, ".evaluate()"]
+      case field of
+        EmptyField -> T.concat ["throw new Error(\"Cannot evaluate empty field\");"]
+        _ -> let fieldName = evalFieldName field
+             in if fieldContainsString field
+                then if fieldIsOnlyString field
+                     then T.concat ["this.", fieldName]
+                     else T.concat ["(typeof this.", fieldName, " === 'string' ? this.", fieldName, " : this.", fieldName, ".evaluate())"]
+                else T.concat ["this.", fieldName, ".evaluate()"]
 
     -- Helper to generate a throw statement for evaluation errors
     throwEvaluationError :: T.Text -> T.Text
     throwEvaluationError msg = T.concat ["throw new Error(\"", msg, "\");"]
 
+    -- Check if a string is a throw statement (starts with "throw ")
+    isThrowStatement :: T.Text -> Bool
+    isThrowStatement = T.isPrefixOf "throw "
+
     -- Generate evaluate() for SEQ nodes: concatenate children results
     generateSeqEvaluate :: [TSGN.Node] -> [Field] -> T.Text
     generateSeqEvaluate members fields =
       let childCalls = map (generateMemberCall fields) (zip [0..] members)
-          joinedCalls = T.intercalate " + " childCalls
-      in TT.inst TTS.evaluate_method (TT.TArray [T.concat ["return ", joinedCalls, ";"]])
+          containsThrow call = isThrowStatement call
+          (hasThrow, throwCall) = case filter containsThrow childCalls of
+                                    [] -> (False, "")
+                                    (c:_) -> (True, c)
+      in if hasThrow
+         then TT.inst TTS.evaluate_method (TT.TArray [throwCall])
+         else let joinedCalls = T.intercalate " + " childCalls
+              in TT.inst TTS.evaluate_method (TT.TArray [T.concat ["return ", joinedCalls, ";"]])
       where
         -- Escape a string for use in TypeScript double-quoted string literal
         escapeTypeScriptString :: T.Text -> T.Text
@@ -320,7 +332,7 @@ generateEvaluateMethod node fields =
               let fieldIdx = countNonStringMembersBefore idx members
               in if fieldIdx < length fields''
                  then evalFieldExpr (fields'' !! fieldIdx)
-                 else T.concat ["throw new Error(\"Internal error: field index out of bounds for SEQ node\");"]  -- Shouldn't happen
+                 else T.concat ["throw new Error(\"Cannot evaluate SEQ node: missing field\");"]  -- Shouldn't happen
 
 
         countNonStringMembersBefore :: Int -> [TSGN.Node] -> Int
@@ -338,33 +350,44 @@ generateEvaluateMethod node fields =
       let -- For now, just evaluate the first alternative
           childCall = if not (null fields')
                       then evalFieldExpr (head fields')
-                      else T.concat ["throw new Error(\"Cannot evaluate CHOICE node: no field available\");"]
-      in TT.inst TTS.evaluate_method (TT.TArray [T.concat ["return ", childCall, ";"]])
+                      else T.concat ["throw new Error(\"Cannot evaluate CHOICE node: missing property\");"]
+          body = if isThrowStatement childCall
+                 then childCall
+                 else T.concat ["return ", childCall, ";"]
+      in TT.inst TTS.evaluate_method (TT.TArray [body])
 
     -- Generate evaluate() for REPEAT nodes: generate 0-n repetitions
     generateRepeatEvaluate :: TSGN.Node -> [Field] -> T.Text
     generateRepeatEvaluate content fields' =
       let childCall = if not (null fields')
                       then evalFieldExpr (head fields')
-                      else T.concat ["throw new Error(\"Cannot evaluate REPEAT node: no field available\");"]
-          -- Simple implementation: just evaluate once for now
-      in TT.inst TTS.evaluate_method (TT.TArray [T.concat ["return ", childCall, ";"]])
+                      else T.concat ["throw new Error(\"Cannot evaluate REPEAT node: missing property\");"]
+          body = if isThrowStatement childCall
+                 then childCall
+                 else T.concat ["return ", childCall, ";"]
+      in TT.inst TTS.evaluate_method (TT.TArray [body])
 
     -- Generate evaluate() for REPEAT1 nodes: generate 1-n repetitions
     generateRepeat1Evaluate :: TSGN.Node -> [Field] -> T.Text
     generateRepeat1Evaluate content fields' =
       let childCall = if not (null fields')
                       then evalFieldExpr (head fields')
-                      else T.concat ["throw new Error(\"Cannot evaluate REPEAT1 node: no field available\");"]
-      in TT.inst TTS.evaluate_method (TT.TArray [T.concat ["return ", childCall, ";"]])
+                      else T.concat ["throw new Error(\"Cannot evaluate REPEAT1 node: missing property\");"]
+          body = if isThrowStatement childCall
+                 then childCall
+                 else T.concat ["return ", childCall, ";"]
+      in TT.inst TTS.evaluate_method (TT.TArray [body])
 
     -- Generate evaluate() for SYMBOL nodes: delegate to referenced class
     generateSymbolEvaluate :: T.Text -> [Field] -> T.Text
     generateSymbolEvaluate _name fields' =
       let childCall = if not (null fields')
                       then evalFieldExpr (head fields')
-                      else T.concat ["throw new Error(\"Cannot evaluate SYMBOL node: no field available\");"]
-      in TT.inst TTS.evaluate_method (TT.TArray [T.concat ["return ", childCall, ";"]])
+                      else T.concat ["throw new Error(\"Cannot evaluate SYMBOL node: missing property\");"]
+          body = if isThrowStatement childCall
+                 then childCall
+                 else T.concat ["return ", childCall, ";"]
+      in TT.inst TTS.evaluate_method (TT.TArray [body])
 
     -- Generate evaluate() for literal nodes: return value
     generateLiteralEvaluate :: T.Text
