@@ -3,13 +3,11 @@
 
 module ProgBuilder.ECMA.ProgBuilderForECMA where
 
+import Control.Monad.State
 import Data.List as L
 import Data.Map qualified as Map
 import Data.Text.Lazy qualified as T
-import ProgBuilder.ProgBuilderDescription
-  ( Property,
-    propsOfNode,
-  )
+import ProgBuilder.ProgBuilderDescription (toGrammarNodeWithProp)
 import Template.Template qualified as TT
 import Template.TypeScriptTemplate qualified as TTS
 import TreeSitterGrammarNodes (isLeaf)
@@ -17,8 +15,9 @@ import TreeSitterGrammarNodes qualified as TSGN
 import Fundamentals.Inference (trans)
 import TypedASTGenerator.NodeDescriptionHelper
 import Utility (upper_the_first_char, escapeTypeScriptString)
-import ProgBuilder.Types (Field(..))
-import ProgBuilder.FieldConversion (fieldsFromProperties, evalFieldName, evalFieldType)
+import ProgBuilder.Types (Field(..), GrammarNodeWithField, AnnoatedField(..))
+import ProgBuilder.FieldConversion (fieldsFromProperties, evalFieldName, evalFieldType, propFromTSGN, isStrProp, toGrammarNodeWithField, extractFields)
+import Debug.Trace (trace)
 
 descript :: TSGN.Grammar -> String
 descript grammar =
@@ -66,8 +65,8 @@ prologue =
 build :: String -> TSGN.Node -> T.Text
 build name rule =
   let className = T.pack $ node_type_ident name
-      props = propsOfNode rule
-      fields = fieldsFromProperties props
+      grammarNodeWithField = toGrammarNodeWithField . toGrammarNodeWithProp $ rule
+      fields = extractFields grammarNodeWithField
       (baseClass, constructorDef, fieldDecls) =
         if isLeaf rule
           then
@@ -80,7 +79,7 @@ build name rule =
               interiorConstructor fields,
               Just $ TT.TArray $ collapse' fields
             )
-      evaluateMethod = if isLeaf rule then "" else generateEvaluateMethod rule fields  -- TODO: change to fields
+      evaluateMethod = if isLeaf rule then "" else generateEvaluateMethod grammarNodeWithField
       factoryMethod = generateFactoryMethods (isLeaf rule) (T.unpack className) fields  -- TODO: change to fields
       allMethods = [constructorDef] ++
                    (if T.null evaluateMethod then [] else [evaluateMethod]) ++
@@ -139,15 +138,8 @@ eval f
   where
     evaluate field = T.concat [evalFieldName field, " : ", evalFieldType field]
 
-
-
-
 collapse' :: [Field] -> [T.Text]
 collapse' = map (\f -> T.concat [eval f, ";\n"])
-
-
-
-
 
 -- | Generate static factory methods for a class
 generateFactoryMethods :: Bool -> String -> [Field] -> T.Text
@@ -191,53 +183,48 @@ generateFactoryMethods isLeafNode className fields =
         fieldName EmptyField = ""
 
 -- | Generate evaluate() method for a grammar node
-generateEvaluateMethod :: TSGN.Node -> [Field] -> T.Text
-generateEvaluateMethod node fields =
+generateEvaluateMethod :: GrammarNodeWithField -> T.Text
+generateEvaluateMethod node =
   case node of
-    TSGN.Seq members -> generateSeqEvaluate members fields
-    TSGN.Choice alternatives -> generateChoiceEvaluate alternatives fields
-    TSGN.Repeat content -> generateRepeatEvaluate content fields
-    TSGN.Repeat1 content -> generateRepeat1Evaluate content fields
-    TSGN.Symbol name -> generateSymbolEvaluate name fields
-    TSGN.StringLiteral _ -> generateLiteralEvaluate
-    TSGN.Pattern _ -> generateLiteralEvaluate
+    TSGN.Seq members -> generateSeqEvaluate members
+    TSGN.Choice alternatives -> generateChoiceEvaluate alternatives
+    TSGN.Repeat content -> generateRepeatEvaluate content
+    TSGN.Repeat1 content -> generateRepeat1Evaluate content
+    TSGN.Symbol annofield -> generateSymbolEvaluate annofield
+    TSGN.StringLiteral annofield -> generateLiteralEvaluate annofield
+    TSGN.Pattern annofield -> generateLiteralEvaluate annofield
     TSGN.Blank -> generateBlankEvaluate
-    TSGN.Field _ content -> generateEvaluateMethod content fields
-    TSGN.Alias content _ _ -> generateEvaluateMethod content fields
-    TSGN.Token content -> generateEvaluateMethod content fields
-    TSGN.ImmediateToken content -> generateEvaluateMethod content fields
-    TSGN.Prec _ content -> generateEvaluateMethod content fields
-    TSGN.PrecLeft _ content -> generateEvaluateMethod content fields
-    TSGN.PrecRight _ content -> generateEvaluateMethod content fields
-    TSGN.PrecDynamic _ content -> generateEvaluateMethod content fields
-    TSGN.Reserved content _ -> generateEvaluateMethod content fields
+    TSGN.Field _ content -> generateEvaluateMethod content
+    TSGN.Alias content _ _ -> generateEvaluateMethod content
+    TSGN.Token content -> generateEvaluateMethod content
+    TSGN.ImmediateToken content -> generateEvaluateMethod content
+    TSGN.Prec _ content -> generateEvaluateMethod content
+    TSGN.PrecLeft _ content -> generateEvaluateMethod content
+    TSGN.PrecRight _ content -> generateEvaluateMethod content
+    TSGN.PrecDynamic _ content -> generateEvaluateMethod content
+    TSGN.Reserved content _ -> generateEvaluateMethod content
     TSGN.Empty -> generateEmptyEvaluate
   where
-    -- Get list of types in a field
-    fieldTypes :: Field -> [T.Text]
-    fieldTypes (Field _ t) = [t]
-    fieldTypes (SumField _ ts) = ts
-    fieldTypes EmptyField = []
+    -- Helper to get field instance name from AnnoatedField
+    annoFieldInstanceName :: AnnoatedField -> T.Text
+    annoFieldInstanceName (AnnoatedField _ field idx) =
+      case (field, idx) of
+        (EmptyField, _) -> ""
+        (_, Nothing) -> ""
+        (Field name _, Just i) -> T.concat [name, T.pack $ "_" ++ show i, "_i"]
+        (SumField name _, Just i) -> T.concat [name, T.pack $ "_" ++ show i, "_i"]
 
-    -- Check if a field contains string type
-    fieldContainsString :: Field -> Bool
-    fieldContainsString = L.any (== "string") . fieldTypes
-
-    -- Check if a field contains only string type (no other types)
-    fieldIsOnlyString :: Field -> Bool
-    fieldIsOnlyString field = evalFieldType field == "string"
-
-    -- Generate expression to evaluate a field (handles string union types)
-    evalFieldExpr :: Field -> T.Text
-    evalFieldExpr field =
+    -- Generate expression to evaluate an annotated field
+    evalAnnoatedFieldExpr :: AnnoatedField -> T.Text
+    evalAnnoatedFieldExpr annofield@(AnnoatedField original field _) =
       case field of
-        EmptyField -> T.concat ["throw new Error(\"Cannot evaluate empty field\");"]
-        _ -> let fieldName = evalFieldName field
-             in if fieldContainsString field
-                then if fieldIsOnlyString field
-                     then T.concat ["this.", fieldName]
-                     else T.concat ["(typeof this.", fieldName, " === 'string' ? this.", fieldName, " : this.", fieldName, ".evaluate())"]
-                else T.concat ["this.", fieldName, ".evaluate()"]
+        EmptyField ->
+          case original of
+            Just s -> T.concat ["\"", escapeTypeScriptString s, "\""]
+            Nothing -> T.concat ["throw new Error(\"Cannot evaluate empty field\");"]
+        _ ->
+          let fieldName = annoFieldInstanceName annofield
+          in T.concat ["this.", fieldName, ".evaluate()"]
 
     -- Helper to generate a throw statement for evaluation errors
     throwEvaluationError :: T.Text -> T.Text
@@ -247,91 +234,84 @@ generateEvaluateMethod node fields =
     isThrowStatement :: T.Text -> Bool
     isThrowStatement = T.isPrefixOf "throw "
 
+    -- Evaluate a node to an expression (or throw statement)
+    evalNodeExpr :: GrammarNodeWithField -> T.Text
+    evalNodeExpr n =
+      case n of
+        TSGN.Seq members ->
+          let childCalls = map evalNodeExpr members
+              containsThrow call = isThrowStatement call
+          in case filter containsThrow childCalls of
+               [] -> T.intercalate " + " childCalls
+               (c:_) -> c
+        TSGN.Choice alternatives ->
+          if null alternatives
+            then throwEvaluationError "Cannot evaluate CHOICE node: missing alternative"
+            else evalNodeExpr (head alternatives)
+        TSGN.Repeat content -> evalNodeExpr content
+        TSGN.Repeat1 content -> evalNodeExpr content
+        TSGN.Symbol annofield -> evalAnnoatedFieldExpr annofield
+        TSGN.StringLiteral annofield -> evalAnnoatedFieldExpr annofield
+        TSGN.Pattern annofield -> evalAnnoatedFieldExpr annofield
+        TSGN.Blank -> "\"\""
+        TSGN.Field _ content -> evalNodeExpr content
+        TSGN.Alias content _ _ -> evalNodeExpr content
+        TSGN.Token content -> evalNodeExpr content
+        TSGN.ImmediateToken content -> evalNodeExpr content
+        TSGN.Prec _ content -> evalNodeExpr content
+        TSGN.PrecLeft _ content -> evalNodeExpr content
+        TSGN.PrecRight _ content -> evalNodeExpr content
+        TSGN.PrecDynamic _ content -> evalNodeExpr content
+        TSGN.Reserved content _ -> evalNodeExpr content
+        TSGN.Empty -> "\"\""
+
     -- Generate evaluate() for SEQ nodes: concatenate children results
-    generateSeqEvaluate :: [TSGN.Node] -> [Field] -> T.Text
-    generateSeqEvaluate members fields =
-      let childCalls = map (generateMemberCall fields) (zip [0..] members)
-          containsThrow call = isThrowStatement call
-          (hasThrow, throwCall) = case filter containsThrow childCalls of
-                                    [] -> (False, "")
-                                    (c:_) -> (True, c)
-      in if hasThrow
-         then TT.inst TTS.evaluate_method (TT.TArray [throwCall])
-         else let joinedCalls = T.intercalate " + " childCalls
-              in TT.inst TTS.evaluate_method (TT.TArray [T.concat ["return ", joinedCalls, ";"]])
-      where
-
-
-        generateMemberCall :: [Field] -> (Int, TSGN.Node) -> T.Text
-        generateMemberCall fields'' (idx, member) =
-          case member of
-            TSGN.StringLiteral s -> T.concat ["\"", escapeTypeScriptString s, "\""]
-            TSGN.Pattern s -> T.concat ["\"", escapeTypeScriptString s, "\""]
-            _ ->
-              let fieldIdx = countNonStringMembersBefore idx members
-              in if fieldIdx < length fields''
-                 then evalFieldExpr (fields'' !! fieldIdx)
-                 else T.concat ["throw new Error(\"Cannot evaluate SEQ node: missing field\");"]  -- Shouldn't happen
-
-
-        countNonStringMembersBefore :: Int -> [TSGN.Node] -> Int
-        countNonStringMembersBefore targetIdx members' =
-          length $ filter (not . isStringMember) $ take targetIdx members'
-
-        isStringMember :: TSGN.Node -> Bool
-        isStringMember (TSGN.StringLiteral _) = True
-        isStringMember (TSGN.Pattern _) = True
-        isStringMember _ = False
+    generateSeqEvaluate :: [GrammarNodeWithField] -> T.Text
+    generateSeqEvaluate members =
+      let expr = evalNodeExpr (TSGN.Seq members)
+      in if isThrowStatement expr
+         then TT.inst TTS.evaluate_method (TT.TArray [expr])
+         else TT.inst TTS.evaluate_method (TT.TArray [T.concat ["return ", expr, ";"]])
 
     -- Generate evaluate() for CHOICE nodes: need to handle choice resolution
-    generateChoiceEvaluate :: [TSGN.Node] -> [Field] -> T.Text
-    generateChoiceEvaluate _alternatives fields' =
-      let -- For now, just evaluate the first alternative
-          childCall = if not (null fields')
-                      then evalFieldExpr (head fields')
-                      else T.concat ["throw new Error(\"Cannot evaluate CHOICE node: missing property\");"]
-          body = if isThrowStatement childCall
-                 then childCall
-                 else T.concat ["return ", childCall, ";"]
-      in TT.inst TTS.evaluate_method (TT.TArray [body])
+    generateChoiceEvaluate :: [GrammarNodeWithField] -> T.Text
+    generateChoiceEvaluate alternatives =
+      let expr = evalNodeExpr (TSGN.Choice alternatives)
+      in if isThrowStatement expr
+         then TT.inst TTS.evaluate_method (TT.TArray [expr])
+         else TT.inst TTS.evaluate_method (TT.TArray [T.concat ["return ", expr, ";"]])
 
     -- Generate evaluate() for REPEAT nodes: generate 0-n repetitions
-    generateRepeatEvaluate :: TSGN.Node -> [Field] -> T.Text
-    generateRepeatEvaluate content fields' =
-      let childCall = if not (null fields')
-                      then evalFieldExpr (head fields')
-                      else T.concat ["throw new Error(\"Cannot evaluate REPEAT node: missing property\");"]
-          body = if isThrowStatement childCall
-                 then childCall
-                 else T.concat ["return ", childCall, ";"]
-      in TT.inst TTS.evaluate_method (TT.TArray [body])
+    generateRepeatEvaluate :: GrammarNodeWithField -> T.Text
+    generateRepeatEvaluate content =
+      let expr = evalNodeExpr (TSGN.Repeat content)
+      in if isThrowStatement expr
+         then TT.inst TTS.evaluate_method (TT.TArray [expr])
+         else TT.inst TTS.evaluate_method (TT.TArray [T.concat ["return ", expr, ";"]])
 
     -- Generate evaluate() for REPEAT1 nodes: generate 1-n repetitions
-    generateRepeat1Evaluate :: TSGN.Node -> [Field] -> T.Text
-    generateRepeat1Evaluate content fields' =
-      let childCall = if not (null fields')
-                      then evalFieldExpr (head fields')
-                      else T.concat ["throw new Error(\"Cannot evaluate REPEAT1 node: missing property\");"]
-          body = if isThrowStatement childCall
-                 then childCall
-                 else T.concat ["return ", childCall, ";"]
-      in TT.inst TTS.evaluate_method (TT.TArray [body])
+    generateRepeat1Evaluate :: GrammarNodeWithField -> T.Text
+    generateRepeat1Evaluate content =
+      let expr = evalNodeExpr (TSGN.Repeat1 content)
+      in if isThrowStatement expr
+         then TT.inst TTS.evaluate_method (TT.TArray [expr])
+         else TT.inst TTS.evaluate_method (TT.TArray [T.concat ["return ", expr, ";"]])
 
     -- Generate evaluate() for SYMBOL nodes: delegate to referenced class
-    generateSymbolEvaluate :: T.Text -> [Field] -> T.Text
-    generateSymbolEvaluate _name fields' =
-      let childCall = if not (null fields')
-                      then evalFieldExpr (head fields')
-                      else T.concat ["throw new Error(\"Cannot evaluate SYMBOL node: missing property\");"]
-          body = if isThrowStatement childCall
-                 then childCall
-                 else T.concat ["return ", childCall, ";"]
-      in TT.inst TTS.evaluate_method (TT.TArray [body])
+    generateSymbolEvaluate :: AnnoatedField -> T.Text
+    generateSymbolEvaluate annofield =
+      let expr = evalAnnoatedFieldExpr annofield
+      in if isThrowStatement expr
+         then TT.inst TTS.evaluate_method (TT.TArray [expr])
+         else TT.inst TTS.evaluate_method (TT.TArray [T.concat ["return ", expr, ";"]])
 
     -- Generate evaluate() for literal nodes: return value
-    generateLiteralEvaluate :: T.Text
-    generateLiteralEvaluate =
-      TT.inst TTS.evaluate_method (TT.TArray ["return this.value_;"])
+    generateLiteralEvaluate :: AnnoatedField -> T.Text
+    generateLiteralEvaluate annofield =
+      let expr = evalAnnoatedFieldExpr annofield
+      in if isThrowStatement expr
+         then TT.inst TTS.evaluate_method (TT.TArray [expr])
+         else TT.inst TTS.evaluate_method (TT.TArray [T.concat ["return ", expr, ";"]])
 
     -- Generate evaluate() for BLANK nodes: return empty string
     generateBlankEvaluate :: T.Text
@@ -342,6 +322,3 @@ generateEvaluateMethod node fields =
     generateEmptyEvaluate :: T.Text
     generateEmptyEvaluate =
       TT.inst TTS.evaluate_method (TT.TArray ["return \"\";"])
-
-    -- Helper to get property name by index (with _i suffix)
-

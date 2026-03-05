@@ -10,13 +10,18 @@ module ProgBuilder.FieldConversion
   , isStrProp
   , isBuiltin
   , typeShow
+  , toGrammarNodeWithField
+  , extractFields
   ) where
 
 import qualified Data.Text.Lazy as T
-import Data.Text.Lazy (Text)
-import Data.List as L (nub, intercalate, any)
-import ProgBuilder.ProgBuilderDescription (Property(..), propType)
-import ProgBuilder.Types (Field(..))
+import Data.List as L (nub, intercalate)
+import Data.Maybe (isJust, catMaybes)
+import Control.Monad.State
+import ProgBuilder.ProgBuilderDescription (Property(..), propType, propsOfNode, GrammarNodeWithProp)
+import qualified ProgBuilder.Types as Typ
+import TreeSitterGrammarNodes (GrammarNode, Node)
+import qualified TreeSitterGrammarNodes as TSGN
 import Utility (upper_the_first_char)
 
 -- | ECMA Knowledge
@@ -51,11 +56,12 @@ propertyTypeStr prop = case prop of
   StrProp _ _ -> "string"
 
 -- | Convert a Property to a Field (without suffix indexing)
-propFromTSGN :: Property -> Field
+propFromTSGN :: Property -> Typ.Field
 propFromTSGN x
-  | (SymbolProp p_type _) <- x = Field p_type p_type
-  | (StrProp _ _) <- x = EmptyField
-  | (NamedProp p_name p_types _) <- x = SumField p_name $ map (asTypeStr . propType) p_types
+  | (SymbolProp p_type _) <- x = Typ.Field p_type p_type
+  | (StrProp _ _) <- x = Typ.EmptyField
+  | (NamedProp p_name p_types _) <- x = Typ.SumField p_name $ map (asTypeStr . propType) p_types
+
 
 -- | Check if a property is a string literal (StrProp)
 isStrProp :: Property -> Bool
@@ -64,7 +70,7 @@ isStrProp _ = False
 
 -- | Convert list of properties to fields with sequential suffixes.
 -- String literals are skipped (no field). Other properties get _0, _1 suffixes.
-fieldsFromProperties :: [Property] -> [Field]
+fieldsFromProperties :: [Property] -> [Typ.Field]
 fieldsFromProperties props = go 0 props
   where
     go _ [] = []
@@ -73,31 +79,70 @@ fieldsFromProperties props = go 0 props
       | otherwise =
           let baseField = propFromTSGN prop
               suffixedField = case baseField of
-                Field name ftype -> Field (T.concat [name, T.pack $ "_" ++ show idx]) ftype
-                SumField name ftypes -> SumField (T.concat [name, T.pack $ "_" ++ show idx]) ftypes
-                EmptyField -> EmptyField  -- shouldn't happen since StrProp already filtered
+                Typ.Field name ftype -> Typ.Field (T.concat [name, T.pack $ "_" ++ show idx]) ftype
+                Typ.SumField name ftypes -> Typ.SumField (T.concat [name, T.pack $ "_" ++ show idx]) ftypes
+                Typ.EmptyField -> Typ.EmptyField  -- shouldn't happen since StrProp already filtered
           in suffixedField : go (idx + 1) rest
 
 -- | Get the instance variable name for a field (adds _i suffix)
-evalFieldName :: Field -> T.Text
+evalFieldName :: Typ.Field -> T.Text
 evalFieldName f
-  | (Field f_name _) <- f = T.concat [f_name, "_i"]
-  | (SumField f_name _) <- f = T.concat [f_name, "_i"]
-  | EmptyField <- f = ""
+  | (Typ.Field f_name _) <- f = T.concat [f_name, "_i"]
+  | (Typ.SumField f_name _) <- f = T.concat [f_name, "_i"]
+  | Typ.EmptyField <- f = ""
 
 -- | Collapse sum type field to TypeScript union type string
-collapseSumType :: Field -> T.Text
-collapseSumType (SumField _ []) = T.pack "undefined"
-collapseSumType (SumField _ types) =
+collapseSumType :: Typ.Field -> T.Text
+collapseSumType (Typ.SumField _ []) = T.pack "undefined"
+collapseSumType (Typ.SumField _ types) =
   T.pack $ L.intercalate " | " $
     nub $ map typeShow types
 -- Unreachable
 collapseSumType _ = undefined
 
 -- | Get TypeScript type string for a field
-evalFieldType :: Field -> T.Text
+evalFieldType :: Typ.Field -> T.Text
 evalFieldType f
-  | (Field _ f_type) <- f =
+  | (Typ.Field _ f_type) <- f =
       T.pack $ upper_the_first_char (T.unpack f_type) ++ "_T"
-  | field@(SumField _ _) <- f = collapseSumType field
-  | EmptyField <- f = ""
+  | field@(Typ.SumField _ _) <- f = collapseSumType field
+  | Typ.EmptyField <- f = ""
+
+toGrammarNodeWithField :: GrammarNodeWithProp -> Typ.GrammarNodeWithField
+toGrammarNodeWithField node = evalState (traverse propertyToAnnoatedField node) 0
+  where
+    propertyToAnnoatedField :: Property -> State Int Typ.AnnoatedField
+    propertyToAnnoatedField prop = do
+      idx <- get
+      if isStrProp prop
+        then return $ Typ.AnnoatedField (Just (str_value prop)) Typ.EmptyField Nothing
+        else do
+          put (idx + 1)
+          let field = propFromTSGN prop
+              original = case prop of
+                           SymbolProp t _ -> Just t
+                           NamedProp n _ _ -> Just n
+                           _ -> Nothing  -- shouldn't happen (StrProp already filtered)
+          return $ Typ.AnnoatedField original field (Just idx)
+
+-- | Extract fields from an annotated grammar tree.
+-- Collects all non-empty fields from leaf AnnoatedField nodes,
+-- adding positional suffixes based on their stored indices.
+-- Note: Field nodes (TSGN.Field) are not handled specially;
+-- only leaf annotations are considered.
+extractFields :: Typ.GrammarNodeWithField -> [Typ.Field]
+extractFields node = catMaybes $ foldMap extractFieldFromAnnoated node
+  where
+    extractFieldFromAnnoated :: Typ.AnnoatedField -> [Maybe Typ.Field]
+    extractFieldFromAnnoated (Typ.AnnoatedField _ field idx) =
+      case (field, idx) of
+        (Typ.EmptyField, _) -> [Nothing]
+        (_, Nothing) -> [Nothing]  -- shouldn't happen
+        (_, Just i) -> [Just $ addSuffixToField field i]
+
+    addSuffixToField :: Typ.Field -> Int -> Typ.Field
+    addSuffixToField (Typ.Field name ftype) idx =
+      Typ.Field (T.concat [name, T.pack $ "_" ++ show idx]) ftype
+    addSuffixToField (Typ.SumField name ftypes) idx =
+      Typ.SumField (T.concat [name, T.pack $ "_" ++ show idx]) ftypes
+    addSuffixToField Typ.EmptyField _ = Typ.EmptyField

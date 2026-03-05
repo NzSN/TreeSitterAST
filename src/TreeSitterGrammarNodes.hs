@@ -119,6 +119,7 @@ instance Traversable GrammarNode where
     Seq members -> Seq <$> traverse (traverse f) members
     Choice members -> Choice <$> traverse (traverse f) members
     Repeat content -> Repeat <$> traverse f content
+    Repeat1 content -> Repeat1 <$> traverse f content
     Symbol name -> Symbol <$> f name
     StringLiteral value -> StringLiteral <$> f value
     Pattern value -> Pattern <$> f value

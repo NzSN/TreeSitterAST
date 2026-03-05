@@ -6,6 +6,9 @@ module ProgBuilder.ProgBuilderDescription
     uniqueBranch,
     convergeNamedProp,
     propType,
+    toGrammarNodeWithProp,
+    extractProperties,
+    GrammarNodeWithProp,
   )
 where
 
@@ -30,6 +33,7 @@ data Property
   | SymbolProp {p_type :: T.Text, hint :: Maybe GenerationHint}
   | NamedProp {p_name :: T.Text, p_types :: [Property], hint :: Maybe GenerationHint}
   deriving (Eq, Ord, Show)
+type GrammarNodeWithProp = TSGN.GrammarNode Property
 
 propType :: Property -> Maybe T.Text
 propType x
@@ -37,32 +41,63 @@ propType x
   | (SymbolProp s _) <- x = Just s
   | (NamedProp s _ _) <- x = Just s
 
+-- | Extract properties from a grammar node via an intermediate annotated tree.
+-- First generate a GrammarNodeWithProp where leaf values are Property,
+-- then extract the flattened list.
 propsOfNode :: TSGN.Node -> [Property]
-propsOfNode x
-  | (TSGN.Seq ns) <- x = seqProc $ map propsOfNode ns
-  | (TSGN.Choice ns) <- x = choiceProc $ map propsOfNode ns
-  | (TSGN.Repeat n) <- x = propsOfNode n
-  | (TSGN.Repeat1 n) <- x = propsOfNode n
-  | (TSGN.Symbol n) <- x = [SymbolProp n (Just (SymbolHint n))]
-  | (TSGN.StringLiteral n) <- x = [StrProp n (Just (LiteralHint n))]
-  | (TSGN.Pattern n) <- x = [StrProp n (Just (PatternHint n))]
-  | (TSGN.Token n) <- x = propsOfNode n
-  | (TSGN.ImmediateToken n) <- x = propsOfNode n
-  | (TSGN.Field f_name n) <- x = [NamedProp f_name (propsOfNode n) (Just (FieldHint f_name))]
-  | (TSGN.Prec _ n) <- x = propsOfNode n
-  | (TSGN.PrecLeft _ n) <- x = propsOfNode n
-  | (TSGN.PrecRight _ n) <- x = propsOfNode n
-  | (TSGN.PrecDynamic _ n) <- x = propsOfNode n
-  | (TSGN.Reserved n _) <- x = propsOfNode n
+propsOfNode = extractProperties . toGrammarNodeWithProp
+
+toGrammarNodeWithProp :: TSGN.Node -> GrammarNodeWithProp
+toGrammarNodeWithProp x
+  | (TSGN.Seq ns) <- x = TSGN.Seq (map toGrammarNodeWithProp ns)
+  | (TSGN.Choice ns) <- x = TSGN.Choice (map toGrammarNodeWithProp ns)
+  | (TSGN.Repeat n) <- x = TSGN.Repeat (toGrammarNodeWithProp n)
+  | (TSGN.Repeat1 n) <- x = TSGN.Repeat1 (toGrammarNodeWithProp n)
+  | (TSGN.Symbol n) <- x = TSGN.Symbol (SymbolProp n (Just (SymbolHint n)))
+  | (TSGN.StringLiteral n) <- x = TSGN.StringLiteral (StrProp n (Just (LiteralHint n)))
+  | (TSGN.Pattern n) <- x = TSGN.Pattern (StrProp n (Just (PatternHint n)))
+  | (TSGN.Token n) <- x = toGrammarNodeWithProp n
+  | (TSGN.ImmediateToken n) <- x = toGrammarNodeWithProp n
+  | (TSGN.Field f_name n) <- x =
+      let fieldNameProp = StrProp f_name (Just (FieldHint f_name))
+          contentNode = toGrammarNodeWithProp n
+      in TSGN.Field fieldNameProp contentNode
+  | (TSGN.Prec _ n) <- x = toGrammarNodeWithProp n
+  | (TSGN.PrecLeft _ n) <- x = toGrammarNodeWithProp n
+  | (TSGN.PrecRight _ n) <- x = toGrammarNodeWithProp n
+  | (TSGN.PrecDynamic _ n) <- x = toGrammarNodeWithProp n
+  | (TSGN.Reserved n _) <- x = toGrammarNodeWithProp n
   -- Named alias
-  | (TSGN.Alias n True _) <- x = propsOfNode n
+  | (TSGN.Alias n True _) <- x = toGrammarNodeWithProp n
   -- Literal alias
-  | (TSGN.Alias n False _) <- x = propsOfNode n
-  | _ <- x = []
+  | (TSGN.Alias n False _) <- x = toGrammarNodeWithProp n
+  | otherwise = TSGN.Empty
+
+extractProperties :: GrammarNodeWithProp -> [Property]
+extractProperties x = case x of
+  TSGN.Symbol prop -> [prop]
+  TSGN.StringLiteral prop -> [prop]
+  TSGN.Pattern prop -> [prop]
+  TSGN.Blank -> []
+  TSGN.Empty -> []
+  TSGN.Seq ns -> seqProc (map extractProperties ns)
+  TSGN.Choice ns -> choiceProc (map extractProperties ns)
+  TSGN.Repeat n -> extractProperties n
+  TSGN.Repeat1 n -> extractProperties n
+  TSGN.Token n -> extractProperties n
+  TSGN.ImmediateToken n -> extractProperties n
+  TSGN.Field fieldNameProp contentNode ->
+      let props = extractProperties contentNode
+      in case fieldNameProp of
+            StrProp name _ -> [NamedProp name props (Just (FieldHint name))]
+            _ -> error "fieldNameProp must be StrProp"
+  TSGN.Prec _ n -> extractProperties n
+  TSGN.PrecLeft _ n -> extractProperties n
+  TSGN.PrecRight _ n -> extractProperties n
+  TSGN.PrecDynamic _ n -> extractProperties n
+  TSGN.Reserved n _ -> extractProperties n
+  TSGN.Alias n _ _ -> extractProperties n
   where
-    -- \| Information of how choice and seq is organized will lost
-    -- after propsOfNode, hence those processing that required
-    -- these information will be handled here.
     choiceProc :: [[Property]] -> [Property]
     choiceProc = concat . convergeNamedProp . uniqueBranch
 
