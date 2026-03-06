@@ -28,8 +28,7 @@ import Utility (upper_the_first_char)
 -- | ECMA Knowledge
 isBuiltin :: T.Text -> Bool
 isBuiltin x
-  | x == "string" = True
-  | x == "undefined" = True
+  | x `elem` ["string", "number", "boolean", "undefined"] = True
   | otherwise = False
 
 -- | Convert a type name to TypeScript type string.
@@ -61,7 +60,9 @@ propertyTypeStr prop = case prop of
 -- | Convert a Property to a Field (without suffix indexing)
 propFromTSGN :: Property -> Typ.Field
 propFromTSGN x
-  | (SymbolProp p_type _) <- x = Typ.Field p_type p_type
+  | (SymbolProp p_type _) <- x =
+      let tsType = T.pack $ upper_the_first_char (T.unpack p_type) ++ "_T"
+       in Typ.Field p_type tsType
   | (StrProp _ _) <- x = Typ.EmptyField
   | (NamedProp p_name p_types _) <- x = Typ.SumField p_name $ map (asTypeStr . propType) p_types
 
@@ -100,15 +101,14 @@ collapseSumType (Typ.SumField _ types) =
   T.pack $
     L.intercalate " | " $
       nub $
-        map typeShow types
+        map T.unpack types
 -- Unreachable
 collapseSumType _ = undefined
 
 -- | Get TypeScript type string for a field
 evalFieldType :: Typ.Field -> T.Text
 evalFieldType f
-  | (Typ.Field _ f_type) <- f =
-      T.pack $ upper_the_first_char (T.unpack f_type) ++ "_T"
+  | (Typ.Field _ f_type) <- f = f_type
   | field@(Typ.SumField _ _) <- f = collapseSumType field
   | Typ.EmptyField <- f = ""
 

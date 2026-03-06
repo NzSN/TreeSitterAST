@@ -6,6 +6,7 @@ module ProgBuilder.ECMA.ProgBuilderForECMA where
 import Control.Monad.State
 import Data.List as L
 import Data.Map qualified as Map
+import Data.Maybe (catMaybes)
 import Data.Text.Lazy qualified as T
 import Debug.Trace (trace)
 import Fundamentals.Inference (trans)
@@ -263,13 +264,87 @@ generateEvaluateMethod node =
           case original of
             Just s -> T.concat ["\"", escapeTypeScriptString s, "\""]
             Nothing -> T.concat ["throw new Error(\"Cannot evaluate empty field\");"]
-        _ ->
+        Field _ ftype ->
           let fieldName = annoFieldInstanceName annofield
-           in T.concat ["this.", fieldName, ".evaluate()"]
+           in if isPrimitiveType ftype
+                then
+                  if ftype == "string"
+                    then T.concat ["this.", fieldName]
+                    else T.concat ["String(this.", fieldName, ")"]
+                else T.concat ["this.", fieldName, ".evaluate()"]
+        SumField _ ftypes ->
+          let fieldName = annoFieldInstanceName annofield
+              -- Check if any non-undefined type is primitive
+              nonUndefinedTypes = filter (/= "undefined") ftypes
+              hasPrimitive = any isPrimitiveType nonUndefinedTypes
+           in if hasPrimitive
+                then -- For sum types with primitives, we need to handle string vs number/boolean
+                  if "string" `elem` nonUndefinedTypes
+                    then T.concat ["this.", fieldName]
+                    else T.concat ["String(this.", fieldName, ")"]
+                else T.concat ["this.", fieldName, ".evaluate()"]
+      where
+        isPrimitiveType :: T.Text -> Bool
+        isPrimitiveType t = t `elem` ["string", "number", "boolean"]
 
     -- Helper to generate a throw statement for evaluation errors
     throwEvaluationError :: T.Text -> T.Text
-    throwEvaluationError msg = T.concat ["throw new Error(\"", msg, "\");"]
+    throwEvaluationError msg = T.concat ["throw new Error(\"", msg, "\")"]
+
+    -- Helper to generate a throw expression (IIFE) for use in ternary expressions
+    throwExpression :: T.Text -> T.Text
+    throwExpression msg = T.concat ["(() => { throw new Error(\"", msg, "\"); })()"]
+
+    -- Generate expression for CHOICE node evaluation
+    generateChoiceExpression :: [GrammarNodeWithField] -> T.Text
+    generateChoiceExpression alternatives =
+      let -- Generate conditional chain for all alternatives
+          conditionalChain = buildConditionalChain alternatives
+       in if T.null conditionalChain
+            then throwExpression "Cannot evaluate CHOICE node: no valid alternatives"
+            else T.concat ["(", conditionalChain, ")"]
+      where
+        -- Helper to find SYMBOL field in a node (unwrapping wrappers)
+        findSymbolField :: GrammarNodeWithField -> Maybe (T.Text, T.Text)
+        findSymbolField node = case node of
+          TSGN.Symbol annofield ->
+            let fieldName = annoFieldInstanceName annofield
+                expr = evalAnnoatedFieldExpr annofield
+             in Just (fieldName, expr)
+          TSGN.Field _ content -> findSymbolField content -- Unwrap FIELD
+          TSGN.Alias content _ _ -> findSymbolField content -- Unwrap ALIAS
+          TSGN.Token content -> findSymbolField content -- Unwrap TOKEN
+          TSGN.ImmediateToken content -> findSymbolField content -- Unwrap IMMEDIATE_TOKEN
+          TSGN.Prec _ content -> findSymbolField content -- Unwrap PREC
+          TSGN.PrecLeft _ content -> findSymbolField content -- Unwrap PREC_LEFT
+          TSGN.PrecRight _ content -> findSymbolField content -- Unwrap PREC_RIGHT
+          TSGN.PrecDynamic _ content -> findSymbolField content -- Unwrap PREC_DYNAMIC
+          TSGN.Reserved content _ -> findSymbolField content -- Unwrap RESERVED
+          _ -> Nothing -- BLANK, SEQ, CHOICE, REPEAT, etc.
+
+        -- Build conditional chain for alternatives
+        buildConditionalChain :: [GrammarNodeWithField] -> T.Text
+        buildConditionalChain [] = throwExpression "No alternative matched in CHOICE node"
+        buildConditionalChain [alt] =
+          -- Last alternative: handle based on type
+          case findSymbolField alt of
+            Just (fieldName, expr) ->
+              -- SYMBOL alternative: check if defined
+              let check = T.concat ["this.", fieldName, " !== undefined"]
+               in T.concat [check, " ? ", expr, " : ", throwExpression "No alternative matched in CHOICE node"]
+            Nothing ->
+              -- Non-SYMBOL alternative (BLANK, etc.): evaluate directly
+              evalNodeExpr alt
+        buildConditionalChain (alt : rest) =
+          case findSymbolField alt of
+            Just (fieldName, expr) ->
+              -- Alternative with checkable field: generate conditional
+              let check = T.concat ["this.", fieldName, " !== undefined"]
+                  restChain = buildConditionalChain rest
+               in T.concat [check, " ? ", expr, " : ", restChain]
+            Nothing ->
+              -- Alternative without checkable field: evaluate directly as fallback
+              evalNodeExpr alt
 
     -- Check if a string is a throw statement (starts with "throw ")
     isThrowStatement :: T.Text -> Bool
@@ -288,9 +363,7 @@ generateEvaluateMethod node =
         TSGN.Choice alternatives ->
           if null alternatives
             then throwEvaluationError "Cannot evaluate CHOICE node: missing alternative"
-            else case alternatives of
-              [] -> throwEvaluationError "Cannot evaluate CHOICE node: no alternatives" -- Should not happen
-              (first : _) -> evalNodeExpr first
+            else generateChoiceExpression alternatives
         TSGN.Repeat content -> evalNodeExpr content
         TSGN.Repeat1 content -> evalNodeExpr content
         TSGN.Symbol annofield -> evalAnnoatedFieldExpr annofield
@@ -316,7 +389,7 @@ generateEvaluateMethod node =
             then TT.inst TTS.evaluate_method (TT.TArray [expr])
             else TT.inst TTS.evaluate_method (TT.TArray [T.concat ["return ", expr, ";"]])
 
-    -- Generate evaluate() for CHOICE nodes: need to handle choice resolution
+    -- Generate evaluate() for CHOICE nodes: handle choice resolution
     generateChoiceEvaluate :: [GrammarNodeWithField] -> T.Text
     generateChoiceEvaluate alternatives =
       let expr = evalNodeExpr (TSGN.Choice alternatives)

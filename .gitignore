@@ -4,3 +4,4 @@ tmp*
 sample/*
 test_*
 agent_coordination
+/.agent-shell/
