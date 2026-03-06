@@ -6,6 +6,46 @@ TreeSitterAST is a Haskell-based code generator that creates TypeScript AST defi
 - **Build System**: Cabal
 - **Testing Framework**: Tasty with HUnit and QuickCheck
 
+## Hierarchical Documentation
+
+This is the root AGENTS.md file. For detailed documentation on specific directories, see:
+- [src/AGENTS.md](src/AGENTS.md) - Core library modules and conventions
+- [test/AGENTS.md](test/AGENTS.md) - Test patterns and runner structure
+- [src/ProgBuilder/AGENTS.md](src/ProgBuilder/AGENTS.md) - Code generation patterns and deep module conventions
+- [src/Template/AGENTS.md](src/Template/AGENTS.md) - Template system documentation
+- [src/TypedASTGenerator/AGENTS.md](src/TypedASTGenerator/AGENTS.md) - Node description patterns
+- [app/AGENTS.md](app/AGENTS.md) - Entry point and CLI documentation
+- [sample/AGENTS.md](sample/AGENTS.md) - Example files and usage
+
+## Project Discovery Insights
+
+Based on comprehensive analysis of the codebase:
+
+### Key Architecture Patterns
+1. **Two-layer description system**: `ProgBuilderDescription.hs` defines high-level `Property` models with `GenerationHint`, which `FieldConversion.hs` converts to concrete `Field` representations
+2. **CHOICE node handling**: Sophisticated branch unification via `uniqueBranch` and `convergeNamedProp` algorithms in `ProgBuilderDescription.hs`
+3. **Annotated field model**: `AnnoatedField` (note spelling) with suffix-based naming (`_i`, `_0`, `_1`) for TypeScript field generation
+4. **ECMA specialization**: Dedicated `ProgBuilderForECMA.hs` for TypeScript-specific code generation with `undefined` injection for CHOICE nodes
+
+### Complexity Hotspots
+- **`src/ProgBuilder/ECMA/ProgBuilderForECMA.hs`** - Highest branching complexity (40+ case/if/where occurrences)
+- **`src/TreeSitterGrammarNodes.hs`** - Complex grammar parsing and transformations
+- **`src/Fundamentals/Inference.hs`** - Inference logic with multiple branching patterns
+
+### Anti-Patterns Found
+1. **"Should never happen"** - `src/ProgBuilder/ProgBuilderDescription.hs:221` - Comment indicates exceptional case
+2. **"No identifier: always use index"** - `src/Fundamentals/Inference.hs:226` - Coding convention comment
+
+### Build/CI Configuration
+- **Cabal configuration**: `TreeSitterAST.cabal` with GHC2024, `-Wall` warnings, explicit module exports
+- **Project settings**: `cabal.project` enables tests and allows newer dependencies
+- **No lint/style configs**: No `.hlint.yaml` or `.stylish-haskell.yaml` present
+- **Dependency CI**: Non-standard CI patterns in `node_modules/` dependencies (outdated actions, Node 10 compatibility)
+
+### Entry Points
+- **Executable**: `app/Main.hs` - CLI entry point with argument parsing
+- **Test runner**: `test/Main.hs` - Centralized test harness using Tasty framework
+
 ---
 
 ## Build & Run Commands
