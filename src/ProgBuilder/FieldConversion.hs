@@ -2,40 +2,43 @@
 {-# LANGUAGE PatternGuards #-}
 
 module ProgBuilder.FieldConversion
-  ( fieldsFromProperties
-  , evalFieldName
-  , evalFieldType
-  , propFromTSGN
-  , propertyTypeStr
-  , isStrProp
-  , isBuiltin
-  , typeShow
-  , toGrammarNodeWithField
-  , extractFields
-  ) where
+  ( fieldsFromProperties,
+    evalFieldName,
+    evalFieldType,
+    propFromTSGN,
+    propertyTypeStr,
+    isStrProp,
+    isBuiltin,
+    typeShow,
+    toGrammarNodeWithField,
+    extractFields,
+  )
+where
 
-import qualified Data.Text.Lazy as T
-import Data.List as L (nub, intercalate)
-import Data.Maybe (isJust, catMaybes)
 import Control.Monad.State
-import ProgBuilder.ProgBuilderDescription (Property(..), propType, propsOfNode, GrammarNodeWithProp)
-import qualified ProgBuilder.Types as Typ
+import Data.List as L (intercalate, nub)
+import Data.Maybe (catMaybes, isJust)
+import Data.Text.Lazy qualified as T
+import ProgBuilder.ProgBuilderDescription (GrammarNodeWithProp, Property (..), propType, propsOfNode)
+import ProgBuilder.Types qualified as Typ
 import TreeSitterGrammarNodes (GrammarNode, Node)
-import qualified TreeSitterGrammarNodes as TSGN
+import TreeSitterGrammarNodes qualified as TSGN
 import Utility (upper_the_first_char)
 
 -- | ECMA Knowledge
 isBuiltin :: T.Text -> Bool
 isBuiltin x
   | x == "string" = True
+  | x == "undefined" = True
   | otherwise = False
 
 -- | Convert a type name to TypeScript type string.
 -- Built-in types are kept as-is, others get "_T" suffix and capitalized first letter.
 typeShow :: T.Text -> String
-typeShow x = if isBuiltin x
-              then T.unpack x
-              else (++ "_T") . upper_the_first_char . T.unpack $ x
+typeShow x =
+  if isBuiltin x
+    then T.unpack x
+    else (++ "_T") . upper_the_first_char . T.unpack $ x
 
 -- | Convert Maybe Text to Text, defaulting to "string" for Nothing.
 asTypeStr :: Maybe T.Text -> T.Text
@@ -50,9 +53,9 @@ propertyTypeStr prop = case prop of
   NamedProp _ p_types _ ->
     let types = map (asTypeStr . propType) p_types
         typeStrs = nub $ map typeShow types
-    in if null typeStrs
-        then "undefined"
-        else T.pack $ L.intercalate " | " typeStrs
+     in if null typeStrs
+          then "undefined"
+          else T.pack $ L.intercalate " | " typeStrs
   StrProp _ _ -> "string"
 
 -- | Convert a Property to a Field (without suffix indexing)
@@ -61,7 +64,6 @@ propFromTSGN x
   | (SymbolProp p_type _) <- x = Typ.Field p_type p_type
   | (StrProp _ _) <- x = Typ.EmptyField
   | (NamedProp p_name p_types _) <- x = Typ.SumField p_name $ map (asTypeStr . propType) p_types
-
 
 -- | Check if a property is a string literal (StrProp)
 isStrProp :: Property -> Bool
@@ -75,14 +77,14 @@ fieldsFromProperties props = go 0 props
   where
     go _ [] = []
     go idx (prop : rest)
-      | isStrProp prop = go idx rest  -- skip string literals, no field
+      | isStrProp prop = go idx rest -- skip string literals, no field
       | otherwise =
           let baseField = propFromTSGN prop
               suffixedField = case baseField of
                 Typ.Field name ftype -> Typ.Field (T.concat [name, T.pack $ "_" ++ show idx]) ftype
                 Typ.SumField name ftypes -> Typ.SumField (T.concat [name, T.pack $ "_" ++ show idx]) ftypes
-                Typ.EmptyField -> Typ.EmptyField  -- shouldn't happen since StrProp already filtered
-          in suffixedField : go (idx + 1) rest
+                Typ.EmptyField -> Typ.EmptyField -- shouldn't happen since StrProp already filtered
+           in suffixedField : go (idx + 1) rest
 
 -- | Get the instance variable name for a field (adds _i suffix)
 evalFieldName :: Typ.Field -> T.Text
@@ -95,8 +97,10 @@ evalFieldName f
 collapseSumType :: Typ.Field -> T.Text
 collapseSumType (Typ.SumField _ []) = T.pack "undefined"
 collapseSumType (Typ.SumField _ types) =
-  T.pack $ L.intercalate " | " $
-    nub $ map typeShow types
+  T.pack $
+    L.intercalate " | " $
+      nub $
+        map typeShow types
 -- Unreachable
 collapseSumType _ = undefined
 
@@ -120,9 +124,9 @@ toGrammarNodeWithField node = evalState (traverse propertyToAnnoatedField node) 
           put (idx + 1)
           let field = propFromTSGN prop
               original = case prop of
-                           SymbolProp t _ -> Just t
-                           NamedProp n _ _ -> Just n
-                           _ -> Nothing  -- shouldn't happen (StrProp already filtered)
+                SymbolProp t _ -> Just t
+                NamedProp n _ _ -> Just n
+                _ -> Nothing -- shouldn't happen (StrProp already filtered)
           return $ Typ.AnnoatedField original field (Just idx)
 
 -- | Extract fields from an annotated grammar tree.
@@ -137,7 +141,7 @@ extractFields node = catMaybes $ foldMap extractFieldFromAnnoated node
     extractFieldFromAnnoated (Typ.AnnoatedField _ field idx) =
       case (field, idx) of
         (Typ.EmptyField, _) -> [Nothing]
-        (_, Nothing) -> [Nothing]  -- shouldn't happen
+        (_, Nothing) -> [Nothing] -- shouldn't happen
         (_, Just i) -> [Just $ addSuffixToField field i]
 
     addSuffixToField :: Typ.Field -> Int -> Typ.Field
