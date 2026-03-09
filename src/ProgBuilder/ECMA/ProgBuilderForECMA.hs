@@ -69,8 +69,32 @@ descript grammar =
       origGrammar = TSGN.orig processed
       transformedGrammar = trans origGrammar
       rules = TSGN.grammarNodes transformedGrammar
-      builder_def = Map.foldrWithKey (\name rule acc -> T.concat [acc, build name rule]) "" rules
+      parentMap = computeParentMap rules
+      -- Sort rules so that parent CHOICE classes come before their alternatives
+      ruleNames = Map.keys rules
+      sortedRuleNames = L.sortBy (compareRules parentMap) ruleNames
+      builder_def = L.foldl' (\acc name -> T.concat [acc, build name (rules Map.! name) parentMap]) "" sortedRuleNames
    in T.unpack $ T.concat [prologue, builder_def]
+  where
+    computeParentMap :: Map.Map String TSGN.Node -> Map.Map String String
+    computeParentMap rules' = Map.fromList $ catMaybes $ map (findParent rules') (Map.keys rules')
+      where
+        findParent rs name = case splitPrefix name of
+          Just (parent, _) | Map.member parent rs && isChoiceWithEmptyMembers (rs Map.! parent) -> Just (name, parent)
+          _ -> Nothing
+        splitPrefix s = case break (== '_') s of
+          (prefix, '_' : suffix) -> Just (prefix, suffix)
+          _ -> Nothing
+        isChoiceWithEmptyMembers node = case node of
+          TSGN.Choice [] -> True
+          _ -> False
+
+    -- Compare two rule names for sorting: parent CHOICE classes before alternatives
+    compareRules :: Map.Map String String -> String -> String -> Ordering
+    compareRules pm a b
+      | Map.lookup a pm == Just b = GT -- b is parent of a, so b should come before a
+      | Map.lookup b pm == Just a = LT -- a is parent of b, so a should come before b
+      | otherwise = compare a b -- arbitrary but consistent alphabetical order
 
 -- imports :: T.Text
 -- imports =
@@ -106,8 +130,8 @@ prologue =
   }\n
   """
 
-build :: String -> TSGN.Node -> T.Text
-build name rule =
+build :: String -> TSGN.Node -> Map.Map String String -> T.Text
+build name rule parentMap =
   let className = T.pack $ node_type_ident name
       grammarNodeWithField = transformChoiceFields $ toGrammarNodeWithField . toGrammarNodeWithProp $ rule
       fields = extractFields grammarNodeWithField
@@ -123,6 +147,11 @@ build name rule =
               interiorConstructor fields,
               Just $ TT.TArray $ collapse' fields
             )
+      -- If this rule is an alternative of a top-level CHOICE node, inherit from parent CHOICE class
+      finalBaseClass =
+        if Map.member name parentMap
+          then T.pack $ node_type_ident (parentMap Map.! name)
+          else baseClass
       evaluateMethod = if isLeaf rule then "" else generateEvaluateMethod grammarNodeWithField
       factoryMethod = generateFactoryMethods (isLeaf rule) (T.unpack className) fields -- TODO: change to fields
       allMethods =
@@ -132,7 +161,7 @@ build name rule =
       methods = if null allMethods then Nothing else Just $ TT.TArray allMethods
    in T.concat
         [ TT.inst TTS.export_qualifier $
-            TT.inst TTS.class_declare className (Just baseClass) fieldDecls methods,
+            TT.inst TTS.class_declare className (Just finalBaseClass) fieldDecls methods,
           "\n"
         ]
   where
