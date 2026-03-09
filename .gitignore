@@ -5,3 +5,4 @@ sample/*
 test_*
 agent_coordination
 /.agent-shell/
+agent_generated/*

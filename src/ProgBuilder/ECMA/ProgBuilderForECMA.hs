@@ -6,7 +6,7 @@ module ProgBuilder.ECMA.ProgBuilderForECMA where
 import Control.Monad.State
 import Data.List as L
 import Data.Map qualified as Map
-import Data.Maybe (catMaybes)
+import Data.Maybe (catMaybes, isJust)
 import Data.Text.Lazy qualified as T
 import Debug.Trace (trace)
 import Fundamentals.Inference (trans)
@@ -305,11 +305,12 @@ generateEvaluateMethod node =
             else T.concat ["(", conditionalChain, ")"]
       where
         -- Helper to find SYMBOL field in a node (unwrapping wrappers)
+        -- Returns field name for checking, and full expression for evaluation
         findSymbolField :: GrammarNodeWithField -> Maybe (T.Text, T.Text)
         findSymbolField node = case node of
           TSGN.Symbol annofield ->
             let fieldName = annoFieldInstanceName annofield
-                expr = evalAnnoatedFieldExpr annofield
+                expr = evalNodeExpr node -- Use full node evaluation, not just field
              in Just (fieldName, expr)
           TSGN.Field _ content -> findSymbolField content -- Unwrap FIELD
           TSGN.Alias content _ _ -> findSymbolField content -- Unwrap ALIAS
@@ -320,7 +321,16 @@ generateEvaluateMethod node =
           TSGN.PrecRight _ content -> findSymbolField content -- Unwrap PREC_RIGHT
           TSGN.PrecDynamic _ content -> findSymbolField content -- Unwrap PREC_DYNAMIC
           TSGN.Reserved content _ -> findSymbolField content -- Unwrap RESERVED
-          _ -> Nothing -- BLANK, SEQ, CHOICE, REPEAT, etc.
+          TSGN.Seq members -> findSymbolFieldInSeq members
+          TSGN.Choice alternatives -> L.find isJust (map findSymbolField alternatives) >>= id
+          _ -> Nothing -- BLANK, REPEAT, etc.
+          -- Helper to find a Symbol field in a SEQ, returning the field name but expression from the full SEQ
+        findSymbolFieldInSeq :: [GrammarNodeWithField] -> Maybe (T.Text, T.Text)
+        findSymbolFieldInSeq members = do
+          -- Find first Symbol in members
+          (fieldName, _) <- L.find isJust (map findSymbolField members) >>= id
+          -- Return field name with full SEQ evaluation
+          return (fieldName, evalNodeExpr (TSGN.Seq members))
 
         -- Build conditional chain for alternatives
         buildConditionalChain :: [GrammarNodeWithField] -> T.Text
