@@ -1,4 +1,8 @@
-# AGENTS.md
+# TREE-SITTER AST KNOWLEDGE BASE
+
+**Generated:** 2026-03-09 10:28:38  
+**Commit:** c7c3e85  
+**Branch:** main  
 
 TreeSitterAST is a Haskell-based code generator that creates TypeScript AST definitions from Tree-sitter grammar files.
 
@@ -26,25 +30,38 @@ Based on comprehensive analysis of the codebase:
 2. **CHOICE node handling**: Sophisticated branch unification via `uniqueBranch` and `convergeNamedProp` algorithms in `ProgBuilderDescription.hs`
 3. **Annotated field model**: `AnnoatedField` (note spelling) with suffix-based naming (`_i`, `_0`, `_1`) for TypeScript field generation
 4. **ECMA specialization**: Dedicated `ProgBuilderForECMA.hs` for TypeScript-specific code generation with `undefined` injection for CHOICE nodes
+5. **Template-based generation**: Uses `Template.Template` (`TT`) and `Template.TypeScriptTemplate` (`TTS`) for structured code emission
 
 ### Complexity Hotspots
 - **`src/ProgBuilder/ECMA/ProgBuilderForECMA.hs`** - Highest branching complexity (40+ case/if/where occurrences)
 - **`src/TreeSitterGrammarNodes.hs`** - Complex grammar parsing and transformations
 - **`src/Fundamentals/Inference.hs`** - Inference logic with multiple branching patterns
+- **`src/ProgBuilder/ProgBuilderDescription.hs`** - Property models and branch unification algorithms
+- **`src/Template/TypeScriptTemplate.hs`** - Template generation logic
 
 ### Anti-Patterns Found
 1. **"Should never happen"** - `src/ProgBuilder/ProgBuilderDescription.hs:221` - Comment indicates exceptional case
 2. **"No identifier: always use index"** - `src/Fundamentals/Inference.hs:226` - Coding convention comment
+3. **Committed build artifacts** - `dist-newstyle/` directory contains Cabal build outputs (should be gitignored)
+4. **Missing CI configuration** - No `.github/workflows/` directory present
 
 ### Build/CI Configuration
 - **Cabal configuration**: `TreeSitterAST.cabal` with GHC2024, `-Wall` warnings, explicit module exports
 - **Project settings**: `cabal.project` enables tests and allows newer dependencies
 - **No lint/style configs**: No `.hlint.yaml` or `.stylish-haskell.yaml` present
-- **Dependency CI**: Non-standard CI patterns in `node_modules/` dependencies (outdated actions, Node 10 compatibility)
+- **IDE support**: `hie.yaml` for Haskell IDE Engine cradle configuration
+- **Missing CI**: No GitHub Actions workflows configured
 
 ### Entry Points
-- **Executable**: `app/Main.hs` - CLI entry point with argument parsing
+- **Executable**: `app/Main.hs` - CLI entry point with argument parsing (dispatches to `astGen` or `progBuilderGen`)
 - **Test runner**: `test/Main.hs` - Centralized test harness using Tasty framework
+- **Argument parsing**: `app/Args.hs` - Uses `optparse-applicative` for CLI argument handling
+
+### Test Patterns
+- **Centralized harness**: `test/Main.hs` wires all Spec modules via Test.Tasty
+- **Module exports**: Each test module exports single `TestTree` symbol (e.g., `inference_spec`, `template_testcase`)
+- **Test data**: Mix of `sample/` fixtures and inline JSON strings
+- **Naming conventions**: `Spec.hs` or `Test.hs` suffixes for test modules
 
 ---
 
@@ -139,9 +156,8 @@ $TEST_BIN -p "QuickCheck"
 ## Code Style Guidelines
 
 ### Language & Extensions
-
 - **Language Standard**: GHC2024
-- **Common Extensions**: `OverloadedStrings`, `LambdaCase`, `RecordWildCards`
+- **Common Extensions**: `OverloadedStrings`, `LambdaCase`, `RecordWildCards`, `PatternGuards`, `OverloadedRecordDot`
 - **GHC Flags**: `-Wall` (warnings as errors, enforced in common stanza)
 
 ### Module Declaration
@@ -163,18 +179,21 @@ where
 - **Third-party**: Qualified with prefix (e.g., `qualified Data.Aeson as Aeson`)
 - **Internal modules**: Qualified with prefix (e.g., `import TreeSitterGrammarNodes qualified as TSGN`)
 - **Ordering**: Group by (1) standard library, (2) third-party, (3) internal; alphabetically within groups
+- **Common patterns**: `Data.Text.Lazy qualified as T`, `Data.List as L`, `Data.Map qualified as Map`
 
 ```haskell
--- Standard library
+-- Standard library (unqualified)
 import Control.Monad.Trans.Class
 import Data.Map
 
--- Third-party
+-- Third-party (qualified with prefix)
 import Data.Aeson as Aeson
 import Data.Aeson.Types
+import Data.Text.Lazy qualified as T
 
--- Internal
-import TreeSitterNodes qualified as TS
+-- Internal modules (qualified with prefix)
+import TreeSitterGrammarNodes qualified as TSGN
+import ProgBuilder.Types
 ```
 
 ### Data Types
@@ -363,9 +382,11 @@ instance FromJSON MyType where
 ## Common Issues
 
 - **Type mismatches**: Ensure `evalFieldType` extracts content type, not field name
-- **Inconsistent field naming**: Use `fieldsFromProperties` consistently
-- **String escaping**: Use `escapeTypeScriptString` for `"` and `\`
+- **Inconsistent field naming**: Use `fieldsFromProperties` consistently for field naming
+- **String escaping**: Use `escapeTypeScriptString` for `"` and `\` characters
 - **MaybeT failure**: Remember to use `MaybeT $ return Nothing` or `mzero`
+- **"Should never happen" cases**: Handle exceptional cases explicitly rather than using comments
+- **Output location confusion**: README vs CLI behavior mismatch - use `--output-dir` consistently
 
 ---
 
@@ -375,6 +396,21 @@ instance FromJSON MyType where
 2. **Incremental building**: Build after each significant change
 3. **Test-driven**: Write tests before implementing new features
 4. **Type safety**: Never suppress type errors with `as any` or `@ts-ignore`
+5. **Property to field conversion**: Always use `fieldsFromProperties` as single source of truth
+6. **CHOICE node handling**: Follow suffix-based naming (`_i`, `_0`, `_1`) and `undefined` injection patterns
+7. **JSON parsing**: Use `FromJSON` with `prependFailure`/`typeMismatch` for good error messages
+
+### Adding New GrammarNode Types
+1. Add variant to `TreeSitterGrammarNodes.GrammarNode`
+2. Update parser (`parseNodeFromJSON`)
+3. Add inference rule in `Fundamentals.Inference`
+4. Add generation logic in `ProgBuilder.ECMA.ProgBuilderForECMA`
+
+### Adding New Tests
+1. Create test module with `Spec.hs` or `Test.hs` suffix
+2. Export single `TestTree` symbol (e.g., `feature_spec`)
+3. Add module to `other-modules` in `TreeSitterAST.cabal`
+4. Import and wire in `test/Main.hs`
 
 ---
 
