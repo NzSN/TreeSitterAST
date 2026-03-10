@@ -1,0 +1,35 @@
+{
+  "$schema": "https://tree-sitter.github.io/tree-sitter/assets/schemas/grammar.schema.json",
+  "name": "choice_field",
+  "rules": {
+    "test_choice_field": {
+      "type": "CHOICE",
+      "members": [
+        {
+          "type": "FIELD",
+          "name": "content",
+          "content": {
+            "type": "SYMBOL",
+            "name": "a"
+          }
+        },
+        {
+          "type": "FIELD",
+          "name": "content",
+          "content": {
+            "type": "SYMBOL",
+            "name": "b"
+          }
+        }
+      ]
+    },
+    "a": {
+      "type": "STRING",
+      "value": "a"
+    },
+    "b": {
+      "type": "STRING",
+      "value": "b"
+    }
+  }
+}

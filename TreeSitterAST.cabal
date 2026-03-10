@@ -139,6 +139,7 @@ test-suite TreeSitterAST-test
                    ProgBuilderUtilitiesSpec,
                    Fundamentals.InferenceSpec,
                    StringEscapingTest,
+                   ProgBuilder.ECMA.ProgBuilderForECMASpec,
 
     -- LANGUAGE extensions used by modules in this package.
     -- other-extensions:

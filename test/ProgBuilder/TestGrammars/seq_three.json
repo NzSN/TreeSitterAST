@@ -1,0 +1,35 @@
+{
+  "$schema": "https://tree-sitter.github.io/tree-sitter/assets/schemas/grammar.schema.json",
+  "name": "seq_three",
+  "rules": {
+    "test_seq_three": {
+      "type": "SEQ",
+      "members": [
+        {
+          "type": "SYMBOL",
+          "name": "first"
+        },
+        {
+          "type": "SYMBOL",
+          "name": "second"
+        },
+        {
+          "type": "SYMBOL",
+          "name": "third"
+        }
+      ]
+    },
+    "first": {
+      "type": "STRING",
+      "value": "first"
+    },
+    "second": {
+      "type": "STRING",
+      "value": "second"
+    },
+    "third": {
+      "type": "STRING",
+      "value": "third"
+    }
+  }
+}

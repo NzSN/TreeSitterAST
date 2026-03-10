@@ -1,0 +1,27 @@
+{
+  "$schema": "https://tree-sitter.github.io/tree-sitter/assets/schemas/grammar.schema.json",
+  "name": "simple_seq",
+  "rules": {
+    "test_seq": {
+      "type": "SEQ",
+      "members": [
+        {
+          "type": "SYMBOL",
+          "name": "first"
+        },
+        {
+          "type": "SYMBOL", 
+          "name": "second"
+        }
+      ]
+    },
+    "first": {
+      "type": "STRING",
+      "value": "first"
+    },
+    "second": {
+      "type": "STRING", 
+      "value": "second"
+    }
+  }
+}

@@ -1,0 +1,27 @@
+{
+  "$schema": "https://tree-sitter.github.io/tree-sitter/assets/schemas/grammar.schema.json",
+  "name": "simple_choice",
+  "rules": {
+    "test_choice": {
+      "type": "CHOICE",
+      "members": [
+        {
+          "type": "SYMBOL",
+          "name": "option_a"
+        },
+        {
+          "type": "SYMBOL",
+          "name": "option_b"
+        }
+      ]
+    },
+    "option_a": {
+      "type": "STRING",
+      "value": "A"
+    },
+    "option_b": {
+      "type": "STRING",
+      "value": "B"
+    }
+  }
+}
