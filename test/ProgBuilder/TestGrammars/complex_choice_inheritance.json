@@ -1,0 +1,93 @@
+{
+  "$schema": "https://tree-sitter.github.io/tree-sitter/assets/schemas/grammar.schema.json",
+  "name": "complex_choice",
+  "rules": {
+    "primary_expression": {
+      "type": "CHOICE",
+      "members": [
+        {
+          "type": "SYMBOL",
+          "name": "identifier"
+        },
+        {
+          "type": "SYMBOL",
+          "name": "number"
+        },
+        {
+          "type": "SYMBOL",
+          "name": "string_literal"
+        },
+        {
+          "type": "SYMBOL",
+          "name": "parenthesized_expression"
+        }
+      ]
+    },
+    "statement": {
+      "type": "CHOICE",
+      "members": [
+        {
+          "type": "SYMBOL",
+          "name": "expression_statement"
+        },
+        {
+          "type": "SYMBOL",
+          "name": "return_statement"
+        },
+        {
+          "type": "SYMBOL",
+          "name": "if_statement"
+        }
+      ]
+    },
+    "_simple_type": {
+      "type": "CHOICE",
+      "members": [
+        {
+          "type": "SYMBOL",
+          "name": "primitive_type"
+        },
+        {
+          "type": "SYMBOL",
+          "name": "array_type"
+        }
+      ]
+    },
+    "identifier": {
+      "type": "PATTERN",
+      "value": "[a-zA-Z_][a-zA-Z0-9_]*"
+    },
+    "number": {
+      "type": "PATTERN",
+      "value": "[0-9]+"
+    },
+    "string_literal": {
+      "type": "STRING",
+      "value": "\"hello\""
+    },
+    "parenthesized_expression": {
+      "type": "SYMBOL",
+      "name": "identifier"
+    },
+    "expression_statement": {
+      "type": "SYMBOL",
+      "name": "identifier"
+    },
+    "return_statement": {
+      "type": "STRING",
+      "value": "return;"
+    },
+    "if_statement": {
+      "type": "STRING",
+      "value": "if"
+    },
+    "primitive_type": {
+      "type": "STRING",
+      "value": "int"
+    },
+    "array_type": {
+      "type": "STRING",
+      "value": "array"
+    }
+  }
+}

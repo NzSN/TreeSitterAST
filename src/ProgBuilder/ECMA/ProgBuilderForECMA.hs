@@ -6,7 +6,7 @@ module ProgBuilder.ECMA.ProgBuilderForECMA where
 import Control.Monad.State
 import Data.List as L
 import Data.Map qualified as Map
-import Data.Maybe (catMaybes, isJust)
+import Data.Maybe (catMaybes, isJust, listToMaybe)
 import Data.Text.Lazy qualified as T
 import Debug.Trace (trace)
 import Fundamentals.Inference (trans)
@@ -79,12 +79,19 @@ descript grammar =
     computeParentMap :: Map.Map String TSGN.Node -> Map.Map String String
     computeParentMap rules' = Map.fromList $ catMaybes $ map (findParent rules') (Map.keys rules')
       where
-        findParent rs name = case splitPrefix name of
-          Just (parent, _) | Map.member parent rs && isChoiceWithEmptyMembers (rs Map.! parent) -> Just (name, parent)
-          _ -> Nothing
-        splitPrefix s = case break (== '_') s of
-          (prefix, '_' : suffix) -> Just (prefix, suffix)
-          _ -> Nothing
+        -- Find parent CHOICE class for an alternative rule.
+        -- An alternative rule name is: parentName ++ "_" ++ suffix
+        -- We check if any existing rule name is a prefix of this name (followed by "_")
+        findParent :: Map.Map String TSGN.Node -> String -> Maybe (String, String)
+        findParent rs name =
+          let allRules = Map.keys rs
+              -- Find rules where name starts with ruleName ++ "_"
+              matchingParents = filter (\p -> name /= p && (p ++ "_") `L.isPrefixOf` name) allRules
+              -- Only keep parents that are CHOICE nodes with empty members
+              validParents = filter (\p -> isChoiceWithEmptyMembers (rs Map.! p)) matchingParents
+           in listToMaybe $ map (\p -> (name, p)) validParents
+
+        isChoiceWithEmptyMembers :: TSGN.Node -> Bool
         isChoiceWithEmptyMembers node = case node of
           TSGN.Choice [] -> True
           _ -> False
