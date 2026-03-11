@@ -310,97 +310,59 @@ generateEvaluateMethod node =
     throwEvaluationError :: T.Text -> T.Text
     throwEvaluationError msg = T.concat ["throw new Error(\"", msg, "\")"]
 
-    -- Helper to generate a throw expression (IIFE) for use in ternary expressions
-    throwExpression :: T.Text -> T.Text
-    throwExpression msg = T.concat ["(() => { throw new Error(\"", msg, "\"); })()"]
-
-    -- Generate expression for CHOICE node evaluation
-    generateChoiceExpression :: [GrammarNodeWithField] -> T.Text
-    generateChoiceExpression alternatives =
-      let -- Generate conditional chain for all alternatives
-          conditionalChain = buildConditionalChain alternatives
-       in if T.null conditionalChain
-            then throwExpression "Cannot evaluate CHOICE node: no valid alternatives"
-            else T.concat ["(", conditionalChain, ")"]
-      where
-        -- Helper to find SYMBOL field in a node (unwrapping wrappers)
-        -- Returns field name for checking, and full expression for evaluation
-        findSymbolField :: GrammarNodeWithField -> Maybe (T.Text, T.Text)
-        findSymbolField node = case node of
-          TSGN.Symbol annofield ->
-            let fieldName = annoFieldInstanceName annofield
-                expr = evalNodeExpr node -- Use full node evaluation, not just field
-             in Just (fieldName, expr)
-          TSGN.Field _ content -> findSymbolField content -- Unwrap FIELD
-          TSGN.Alias content _ _ -> findSymbolField content -- Unwrap ALIAS
-          TSGN.Token content -> findSymbolField content -- Unwrap TOKEN
-          TSGN.ImmediateToken content -> findSymbolField content -- Unwrap IMMEDIATE_TOKEN
-          TSGN.Prec _ content -> findSymbolField content -- Unwrap PREC
-          TSGN.PrecLeft _ content -> findSymbolField content -- Unwrap PREC_LEFT
-          TSGN.PrecRight _ content -> findSymbolField content -- Unwrap PREC_RIGHT
-          TSGN.PrecDynamic _ content -> findSymbolField content -- Unwrap PREC_DYNAMIC
-          TSGN.Reserved content _ -> findSymbolField content -- Unwrap RESERVED
-          TSGN.Seq members -> findSymbolFieldInSeq members
-          TSGN.Choice alts -> L.find isJust (map findSymbolField alts) >>= id
-          _ -> Nothing -- BLANK, REPEAT, etc.
-
-        -- Helper to find a Symbol field in a SEQ, returning the field name but expression from the full SEQ
-        findSymbolFieldInSeq :: [GrammarNodeWithField] -> Maybe (T.Text, T.Text)
-        findSymbolFieldInSeq members = do
-          -- Find first Symbol in members
-          (fieldName, _) <- L.find isJust (map findSymbolField members) >>= id
-          -- Return field name with full SEQ evaluation
-          return (fieldName, evalNodeExpr (TSGN.Seq members))
-
-        -- Build conditional chain for alternatives
-        buildConditionalChain :: [GrammarNodeWithField] -> T.Text
-        buildConditionalChain [] = throwExpression "No alternative matched in CHOICE node"
-        buildConditionalChain [alt] =
-          -- Last alternative: handle based on type
-          case findSymbolField alt of
-            Just (fieldName, expr) ->
-              -- SYMBOL alternative: check if defined
-              -- Remove redundant inner checks for the same field
-              let check = T.concat ["this.", fieldName, " !== undefined"]
-                  cleanExpr = removeRedundantCheck fieldName expr
-               in T.concat [check, " ? ", cleanExpr, " : ", throwExpression "No alternative matched in CHOICE node"]
-            Nothing ->
-              -- Non-SYMBOL alternative (BLANK, etc.): evaluate directly
-              evalNodeExpr alt
-        buildConditionalChain (alt : rest) =
-          case findSymbolField alt of
-            Just (fieldName, expr) ->
-              -- Alternative with checkable field: generate conditional
-              -- Remove redundant inner checks for the same field
-              let check = T.concat ["this.", fieldName, " !== undefined"]
-                  cleanExpr = removeRedundantCheck fieldName expr
-                  restChain = buildConditionalChain rest
-               in T.concat [check, " ? ", cleanExpr, " : ", restChain]
-            Nothing ->
-              -- Alternative without checkable field: evaluate directly as fallback
-              evalNodeExpr alt
-
-        -- Remove redundant conditional checks for a specific field from an expression
-        -- e.g., "this.x !== undefined ? this.x.evaluate() : ..." becomes "this.x.evaluate()"
-        -- when we already know this.x is defined
-        removeRedundantCheck :: T.Text -> T.Text -> T.Text
-        removeRedundantCheck fieldName expr =
-          -- Simple pattern replacement for the most common redundant check:
-          -- "(this.field !== undefined ? this.field.evaluate() : "")" -> "this.field.evaluate()"
-          -- This handles the case where a CHOICE inside a SEQ has a simple SYMBOL alternative
-          let fieldAccess = T.concat ["this.", fieldName, ".evaluate()"]
-              pattern1 = T.concat ["(this.", fieldName, " !== undefined ? ", fieldAccess, " : \"\")"]
-              pattern2 = T.concat ["this.", fieldName, " !== undefined ? ", fieldAccess, " : \"\""]
-           in if pattern1 `T.isInfixOf` expr
-                then T.replace pattern1 fieldAccess expr
-                else
-                  if pattern2 `T.isInfixOf` expr
-                    then T.replace pattern2 fieldAccess expr
-                    else expr
-
     -- Check if a string is a throw statement (starts with "throw ")
     isThrowStatement :: T.Text -> Bool
     isThrowStatement = T.isPrefixOf "throw "
+
+    -- Helper to find SYMBOL field in a node (unwrapping wrappers)
+    -- Shared by both generateChoiceEvaluate and evalNodeExpr for CHOICE
+    -- Returns field name for checking, and full expression for evaluation
+    findSymbolFieldForChoice :: GrammarNodeWithField -> Maybe (T.Text, T.Text)
+    findSymbolFieldForChoice node = case node of
+      TSGN.Symbol annofield ->
+        let fieldName = annoFieldInstanceName annofield
+            expr = evalNodeExpr node
+         in Just (fieldName, expr)
+      TSGN.Field _ content -> findSymbolFieldForChoice content
+      TSGN.Alias content _ _ -> findSymbolFieldForChoice content
+      TSGN.Token content -> findSymbolFieldForChoice content
+      TSGN.ImmediateToken content -> findSymbolFieldForChoice content
+      TSGN.Prec _ content -> findSymbolFieldForChoice content
+      TSGN.PrecLeft _ content -> findSymbolFieldForChoice content
+      TSGN.PrecRight _ content -> findSymbolFieldForChoice content
+      TSGN.PrecDynamic _ content -> findSymbolFieldForChoice content
+      TSGN.Reserved content _ -> findSymbolFieldForChoice content
+      TSGN.Seq members -> findSymbolFieldForChoiceInSeq members
+      TSGN.Choice alts -> L.find isJust (map findSymbolFieldForChoice alts) >>= id
+      _ -> Nothing
+
+    -- Find a Symbol field in a SEQ
+    findSymbolFieldForChoiceInSeq :: [GrammarNodeWithField] -> Maybe (T.Text, T.Text)
+    findSymbolFieldForChoiceInSeq members = do
+      (fieldName, _) <- L.find isJust (map findSymbolFieldForChoice members) >>= id
+      return (fieldName, evalNodeExpr (TSGN.Seq members))
+
+    -- Build if-else statements for CHOICE alternatives
+    -- Used by both generateChoiceEvaluate (wraps in method) and evalNodeExpr (wraps in IIFE)
+    buildChoiceIfElseStatements :: [GrammarNodeWithField] -> [T.Text]
+    buildChoiceIfElseStatements [] = [T.concat ["throw new Error(\"No alternative matched in CHOICE node\");"]]
+    buildChoiceIfElseStatements [alt] =
+      -- Last alternative
+      case findSymbolFieldForChoice alt of
+        Just (fieldName, expr) ->
+          [ T.concat ["if (this.", fieldName, " !== undefined) { return ", expr, "; } "],
+            T.concat ["throw new Error(\"No alternative matched in CHOICE node\");"]
+          ]
+        Nothing ->
+          [T.concat ["return ", evalNodeExpr alt, ";"]]
+    buildChoiceIfElseStatements (alt : rest) =
+      case findSymbolFieldForChoice alt of
+        Just (fieldName, expr) ->
+          let ifStmt = T.concat ["if (this.", fieldName, " !== undefined) { return ", expr, "; } "]
+              restStmts = buildChoiceIfElseStatements rest
+           in ifStmt : restStmts
+        Nothing ->
+          [T.concat ["return ", evalNodeExpr alt, ";"]]
 
     -- Check if an expression is a string literal (e.g., "&&" or 'hello')
     isStringLiteral :: T.Text -> Maybe T.Text
@@ -456,7 +418,7 @@ generateEvaluateMethod node =
         TSGN.Choice alternatives ->
           if null alternatives
             then throwEvaluationError "Cannot evaluate CHOICE node: missing alternative"
-            else generateChoiceExpression alternatives
+            else T.concat ["(() => { ", T.concat (buildChoiceIfElseStatements alternatives), " })()"]
         TSGN.Repeat content -> evalNodeExpr content
         TSGN.Repeat1 content -> evalNodeExpr content
         TSGN.Symbol annofield -> evalAnnoatedFieldExpr annofield
@@ -488,61 +450,6 @@ generateEvaluateMethod node =
     generateChoiceEvaluate alternatives =
       let statements = buildChoiceIfElseStatements alternatives
        in TT.inst TTS.evaluate_method (TT.TArray statements)
-      where
-        -- Build flat if-else statements for CHOICE alternatives
-        buildChoiceIfElseStatements :: [GrammarNodeWithField] -> [T.Text]
-        buildChoiceIfElseStatements [] = [throwStatement "No alternative matched in CHOICE node"]
-        buildChoiceIfElseStatements [alt] =
-          -- Last alternative
-          case findSymbolField alt of
-            Just (fieldName, expr) ->
-              -- Last SYMBOL alternative: if check with return or throw
-              [ T.concat ["if (this.", fieldName, " !== undefined) { return ", expr, "; } "],
-                throwStatement "No alternative matched in CHOICE node"
-              ]
-            Nothing ->
-              -- Non-SYMBOL alternative: evaluate directly
-              [T.concat ["return ", evalNodeExpr alt, ";"]]
-        buildChoiceIfElseStatements (alt : rest) =
-          case findSymbolField alt of
-            Just (fieldName, expr) ->
-              -- Alternative with checkable field: generate if statement
-              let ifStmt = T.concat ["if (this.", fieldName, " !== undefined) { return ", expr, "; } "]
-                  restStmts = buildChoiceIfElseStatements rest
-               in ifStmt : restStmts
-            Nothing ->
-              -- Alternative without checkable field: return directly (first match wins)
-              [T.concat ["return ", evalNodeExpr alt, ";"]]
-
-        -- Helper to find SYMBOL field in a node (unwrapping wrappers)
-        -- Returns field name for checking, and full expression for evaluation
-        findSymbolField :: GrammarNodeWithField -> Maybe (T.Text, T.Text)
-        findSymbolField node = case node of
-          TSGN.Symbol annofield ->
-            let fieldName = annoFieldInstanceName annofield
-                expr = evalNodeExpr node
-             in Just (fieldName, expr)
-          TSGN.Field _ content -> findSymbolField content
-          TSGN.Alias content _ _ -> findSymbolField content
-          TSGN.Token content -> findSymbolField content
-          TSGN.ImmediateToken content -> findSymbolField content
-          TSGN.Prec _ content -> findSymbolField content
-          TSGN.PrecLeft _ content -> findSymbolField content
-          TSGN.PrecRight _ content -> findSymbolField content
-          TSGN.PrecDynamic _ content -> findSymbolField content
-          TSGN.Reserved content _ -> findSymbolField content
-          TSGN.Seq members -> findSymbolFieldInSeq members
-          TSGN.Choice alts -> L.find isJust (map findSymbolField alts) >>= id
-          _ -> Nothing
-
-        -- Find a Symbol field in a SEQ
-        findSymbolFieldInSeq :: [GrammarNodeWithField] -> Maybe (T.Text, T.Text)
-        findSymbolFieldInSeq members = do
-          (fieldName, _) <- L.find isJust (map findSymbolField members) >>= id
-          return (fieldName, evalNodeExpr (TSGN.Seq members))
-
-        throwStatement :: T.Text -> T.Text
-        throwStatement msg = T.concat ["throw new Error(\"", msg, "\");"]
 
     -- Generate evaluate() for REPEAT nodes: generate 0-n repetitions
     generateRepeatEvaluate :: GrammarNodeWithField -> T.Text
