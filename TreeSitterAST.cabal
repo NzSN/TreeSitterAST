@@ -161,6 +161,7 @@ test-suite TreeSitterAST-test
         transformers >= 0.6.1.2,
         mtl,
         containers,
+        process,
         HUnit >= 1.6.2.0,
         QuickCheck >= 2.15.0.1,
         tasty >= 1.5.3,

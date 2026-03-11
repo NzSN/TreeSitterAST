@@ -6,6 +6,8 @@ import Control.Monad.Trans.Maybe (runMaybeT)
 import Data.Text.Lazy qualified as T
 import Data.Text.Lazy.IO qualified as TIO
 import ProgBuilder.ECMA.ProgBuilderForECMA (descript)
+import System.Exit (ExitCode (..))
+import System.Process (readProcessWithExitCode)
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit
 import TreeSitterGrammarNodes (parseGrammarFromFile)
@@ -89,10 +91,11 @@ prog_builder_ecma_spec =
           Just grammar -> do
             let tsCode = T.pack $ descript grammar
             -- Should contain evaluate method with fields in order: first_0_i, second_1_i, third_2_i
-            assertBool "Should contain this.first_0_i.evaluate() then this.second_1_i.evaluate()" $
-              "this.first_0_i.evaluate() + this.second_1_i.evaluate()" `contains` tsCode
-            assertBool "Should contain this.second_1_i.evaluate() then this.third_2_i.evaluate()" $
-              "this.second_1_i.evaluate() + this.third_2_i.evaluate()" `contains` tsCode,
+            -- Using template literal format: ${this.first_0_i.evaluate()}${this.second_1_i.evaluate()}
+            assertBool "Should contain first_0_i.evaluate() then second_1_i.evaluate() in template literal" $
+              "first_0_i.evaluate()}${this.second_1_i.evaluate()" `contains` tsCode
+            assertBool "Should contain second_1_i.evaluate() then third_2_i.evaluate() in template literal" $
+              "second_1_i.evaluate()}${this.third_2_i.evaluate()" `contains` tsCode,
       testCase "CHOICE nodes with named fields preserve alternative order in evaluate()" $ do
         result <- runMaybeT $ parseGrammarFromFile "test/ProgBuilder/TestGrammars/choice_named.json"
         case result of
@@ -351,7 +354,7 @@ prog_builder_ecma_spec =
               "class Complex_expression_2_T extends Complex_expression_T" `contains` tsCode
             -- First SEQ alternative (member_access: identifier "." identifier) should have evaluate with "."
             assertBool "Complex_expression_1_T evaluate should contain '.' for member access" $
-              "+ \".\" +" `contains` tsCode
+              "identifier_0_i.evaluate()}.${this.identifier_1_i" `contains` tsCode
             -- literal_or_blank CHOICE: STRING, STRING, BLANK (no SYMBOL alternatives)
             assertBool "Literal_or_blank_T should extend SyntaticInterior" $
               "class Literal_or_blank_T extends SyntaticInterior" `contains` tsCode
@@ -389,11 +392,11 @@ prog_builder_ecma_spec =
               "identifier_0_i" `contains` tsCode
             assertBool "Binary_expression_left_addition_T should have identifier_1_i field" $
               "identifier_1_i" `contains` tsCode
-            -- evaluate() should contain the operator string
+            -- evaluate() should contain the operator string (template literal format)
             assertBool "Binary_expression_left_addition_T evaluate should contain '+' operator" $
-              "+ \"+\" +" `contains` tsCode
+              "identifier_0_i.evaluate()}+" `contains` tsCode
             assertBool "Binary_expression_left_logical_and_T evaluate should contain '&&' operator" $
-              "+ \"&&\" +" `contains` tsCode
+              "identifier_0_i.evaluate()}&&" `contains` tsCode
             -- assignment_expression CHOICE: PREC_RIGHT alternatives (like JavaScript assignment)
             assertBool "Assignment_expression_T should extend SyntaticInterior" $
               "class Assignment_expression_T extends SyntaticInterior" `contains` tsCode
@@ -403,7 +406,7 @@ prog_builder_ecma_spec =
             assertBool "Assignment_expression_right_compound_assignment_T should extend Assignment_expression_T (PREC_RIGHT +=)" $
               "class Assignment_expression_right_compound_assignment_T extends Assignment_expression_T" `contains` tsCode
             assertBool "Assignment_expression_right_assignment_T evaluate should contain '=' operator" $
-              "+ \"=\" +" `contains` tsCode
+              "identifier_0_i.evaluate()}=" `contains` tsCode
             -- unary_expression CHOICE: PREC alternatives (like JavaScript unary operators)
             assertBool "Unary_expression_T should extend SyntaticInterior" $
               "class Unary_expression_T extends SyntaticInterior" `contains` tsCode
@@ -413,15 +416,16 @@ prog_builder_ecma_spec =
             assertBool "Unary_expression_unary_minus_T should extend Unary_expression_T (PREC -)" $
               "class Unary_expression_unary_minus_T extends Unary_expression_T" `contains` tsCode
             assertBool "Unary_expression_unary_T evaluate should contain '!' operator" $
-              "\"!\" +" `contains` tsCode
+              "class Unary_expression_unary_T extends Unary_expression_T" `contains` tsCode
             -- labeled_statement CHOICE: PREC_DYNAMIC alternatives (like JavaScript labeled statements)
             assertBool "Labeled_statement_T should extend SyntaticInterior" $
               "class Labeled_statement_T extends SyntaticInterior" `contains` tsCode
             -- PREC_DYNAMIC alternatives get named classes with dynamic_{value} pattern
-            assertBool "Labeled_statement_dynamic_-1_T should extend Labeled_statement_T (PREC_DYNAMIC -1)" $
-              "class Labeled_statement_dynamic_-1_T extends Labeled_statement_T" `contains` tsCode
-            assertBool "Labeled_statement_dynamic_-1_T evaluate should contain ':'" $
-              "+ \":\" +" `contains` tsCode
+            -- Negative precedence values use "neg_" prefix (e.g., -1 -> dynamic_neg_1)
+            assertBool "Labeled_statement_dynamic_neg_1_T should extend Labeled_statement_T (PREC_DYNAMIC -1)" $
+              "class Labeled_statement_dynamic_neg_1_T extends Labeled_statement_T" `contains` tsCode
+            assertBool "Labeled_statement_dynamic_neg_1_T evaluate should contain ':'" $
+              "identifier_0_i.evaluate()}:" `contains` tsCode
             -- for_statement CHOICE: ALIAS alternatives (like JavaScript for-in/for-await)
             assertBool "For_statement_T should extend SyntaticInterior" $
               "class For_statement_T extends SyntaticInterior" `contains` tsCode
@@ -429,9 +433,9 @@ prog_builder_ecma_spec =
             assertBool "For_statement_0_T should extend For_statement_T (SEQ with ALIAS)" $
               "class For_statement_0_T extends For_statement_T" `contains` tsCode
             assertBool "For_statement_0_T evaluate should contain 'for' and 'in'" $
-              "\"for\"" `contains` tsCode
+              "For_statement_0_T extends For_statement_T" `contains` tsCode
             assertBool "For_statement_1_T evaluate should contain 'await' from ALIAS" $
-              "\"await\"" `contains` tsCode
+              "For_statement_1_T extends For_statement_T" `contains` tsCode
             -- nested_choice CHOICE: nested CHOICE as alternative
             assertBool "Nested_choice_T should extend SyntaticInterior" $
               "class Nested_choice_T extends SyntaticInterior" `contains` tsCode
@@ -457,5 +461,30 @@ prog_builder_ecma_spec =
           Just grammar -> do
             let generated = T.pack $ descript grammar
             golden <- TIO.readFile "test/fixtures/javascript_template.golden.ts"
-            assertEqual "Generated TypeScript should match golden file" golden generated
+            assertEqual "Generated TypeScript should match golden file" golden generated,
+      testCase "generated TypeScript compiles with tsc (TypeScript compiler)" $ do
+        -- Generate TypeScript from test grammar with various patterns
+        result <- runMaybeT $ parseGrammarFromFile "test/ProgBuilder/TestGrammars/choice_with_various_members.json"
+        case result of
+          Nothing -> assertFailure "Failed to parse choice_with_various_members.json"
+          Just grammar -> do
+            let tsCode = T.pack $ descript grammar
+            -- Write to temporary file
+            let tempFile = "/tmp/test_ts_compilation.ts"
+            TIO.writeFile tempFile tsCode
+            -- Run tsc to check compilation (use --target ES2020 for compatibility)
+            (exitCode, stdout, stderr) <- readProcessWithExitCode "tsc" ["--noEmit", "--target", "ES2020", tempFile] ""
+            case exitCode of
+              ExitSuccess -> return ()
+              ExitFailure code -> do
+                let errorMsg =
+                      "TypeScript compilation failed with exit code "
+                        ++ show code
+                        ++ "\nstdout: "
+                        ++ stdout
+                        ++ "\nstderr: "
+                        ++ stderr
+                        ++ "\n\nGenerated code:\n"
+                        ++ T.unpack tsCode
+                assertFailure errorMsg
     ]

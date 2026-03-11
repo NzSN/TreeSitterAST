@@ -1,40 +1,41 @@
+{-# LANGUAGE OverloadedStrings #-}
+
 -- | Logics that used to do transform a GrammarNode into
 -- a form that acceptable in performance aspect. And inference
 -- out a pattern of expressions that used to evaluate a GrammarNode
 -- into correspond source code that used to generate sentence of
 -- target language.
-{-# LANGUAGE OverloadedStrings #-}
 module Fundamentals.Inference where
 
-import qualified TreeSitterGrammarNodes as TSGN
-import qualified Data.Text.Lazy as T
-
-import Control.Monad.State (State, runState, get, put, modify)
-import Data.Text.Lazy (Text)
-import Data.Traversable (forM)
+import Control.Monad.State (State, get, modify, put, runState)
+import Data.Map qualified as Map
 import Data.Maybe (mapMaybe)
-import qualified Data.Map as Map
-import qualified Data.Set as Set
+import Data.Set qualified as Set
+import Data.Text.Lazy (Text)
+import Data.Text.Lazy qualified as T
+import Data.Traversable (forM)
+import TreeSitterGrammarNodes qualified as TSGN
 
 type TextGN = TSGN.GrammarNode Text
 
 data TransitionPoint a
-  = SEQ { seqNode :: a }
-  | CHOICE {
-      ruleName :: Text,
-      choiceIdentifier :: a,
-      alternativeIndex :: Int,
-      alternativeNode :: a
-    }
+  = SEQ {seqNode :: a}
+  | CHOICE
+      { ruleName :: Text,
+        choiceIdentifier :: a,
+        alternativeIndex :: Int,
+        alternativeNode :: a
+      }
   deriving (Eq, Ord, Show)
 
-data InferenceMeta a = IM {
-  node :: a,
-  currentRule :: Maybe Text,
-  choiceDepth :: Int,
-  isRootNode :: Bool,
-  transitionPoints :: [TransitionPoint a],
-  usedIdentifiers :: Set.Set Text }
+data InferenceMeta a = IM
+  { node :: a,
+    currentRule :: Maybe Text,
+    choiceDepth :: Int,
+    isRootNode :: Bool,
+    transitionPoints :: [TransitionPoint a],
+    usedIdentifiers :: Set.Set Text
+  }
   deriving (Eq, Ord, Show)
 
 type InferGN = State (InferenceMeta TextGN)
@@ -56,34 +57,38 @@ traverseWithRuleContext :: Bool -> Text -> (TSGN.Node -> InferGN TSGN.Node) -> T
 traverseWithRuleContext isRoot ruleName f n = do
   oldMeta <- get
   -- Update context with current node and rule
-  put $ oldMeta { node = n, currentRule = Just ruleName, isRootNode = isRoot }
+  put $ oldMeta {node = n, currentRule = Just ruleName, isRootNode = isRoot}
   nodeResult <- case n of
     TSGN.Choice members -> do
       -- Increment choice depth
-      modify (\m -> m { choiceDepth = choiceDepth m + 1 })
+      modify (\m -> m {choiceDepth = choiceDepth m + 1})
       meta <- get
       let isTopMost = choiceDepth meta == 1
-      branchResult <- if isTopMost && isRoot
-        then do
-          -- Process each alternative, capturing them as transition points
-          processedMembers <- forM (zip [0..] members) $ \(idx, member) -> do
-            -- Process the alternative (not root anymore)
-            processedAlt <- traverseWithRuleContext False ruleName f member
-            -- Store as transition point with rule name and index
-            let choiceId = TSGN.Symbol (ruleName <> "_choice")
-            modify (\m -> m {
-              transitionPoints = CHOICE ruleName choiceId idx processedAlt : transitionPoints m
-            })
-            return processedAlt
-          -- Apply transformation to the CHOICE node itself (will be emptied by splitChoiceRule)
-          f (TSGN.Choice processedMembers)
-        else do
-          -- Nested CHOICE or non-root: process but don't create transition points
-          processedMembers <- forM members $ \member -> do
-            traverseWithRuleContext False ruleName f member
-          f (TSGN.Choice processedMembers)
+      branchResult <-
+        if isTopMost && isRoot
+          then do
+            -- Process each alternative, capturing them as transition points
+            processedMembers <- forM (zip [0 ..] members) $ \(idx, member) -> do
+              -- Process the alternative (not root anymore)
+              processedAlt <- traverseWithRuleContext False ruleName f member
+              -- Store as transition point with rule name and index
+              let choiceId = TSGN.Symbol (ruleName <> "_choice")
+              modify
+                ( \m ->
+                    m
+                      { transitionPoints = CHOICE ruleName choiceId idx processedAlt : transitionPoints m
+                      }
+                )
+              return processedAlt
+            -- Apply transformation to the CHOICE node itself (will be emptied by splitChoiceRule)
+            f (TSGN.Choice processedMembers)
+          else do
+            -- Nested CHOICE or non-root: process but don't create transition points
+            processedMembers <- forM members $ \member -> do
+              traverseWithRuleContext False ruleName f member
+            f (TSGN.Choice processedMembers)
       -- Decrement choice depth
-      modify (\m -> m { choiceDepth = choiceDepth m - 1 })
+      modify (\m -> m {choiceDepth = choiceDepth m - 1})
       return branchResult
     TSGN.Seq members -> do
       processedMembers <- forM members $ \member -> do
@@ -125,7 +130,7 @@ traverseWithRuleContext isRoot ruleName f n = do
     -- Leaf nodes: Symbol, StringLiteral, Pattern, Blank, Empty
     _ -> f n
   -- Restore rule context and node
-  modify (\meta -> meta { currentRule = currentRule oldMeta, node = node oldMeta, isRootNode = isRootNode oldMeta })
+  modify (\meta -> meta {currentRule = currentRule oldMeta, node = node oldMeta, isRootNode = isRootNode oldMeta})
   return nodeResult
 
 -- | Transform a single rule, splitting its CHOICE nodes.
@@ -140,11 +145,13 @@ splitChoicesInGrammar :: TSGN.Grammar -> (TSGN.Grammar, InferenceMeta TSGN.Node)
 splitChoicesInGrammar grammar =
   let rules = TSGN.grammarNodes grammar
       initialState = IM TSGN.Empty Nothing 0 False [] Set.empty
-      (processedRules, finalState) = runState
-        (mapM transformRule (Map.toList rules))
-        initialState
-  in (grammar { TSGN.grammarNodes = Map.fromList processedRules },
-      finalState)
+      (processedRules, finalState) =
+        runState
+          (mapM transformRule (Map.toList rules))
+          initialState
+   in ( grammar {TSGN.grammarNodes = Map.fromList processedRules},
+        finalState
+      )
 
 -- | Extract precedence identifier and stripped node if node is a precedence wrapper.
 precedenceIdentifier :: TSGN.Node -> Maybe (T.Text, TSGN.Node)
@@ -157,7 +164,9 @@ precedenceIdentifier node = case node of
   where
     precToText :: TSGN.PrecedenceValue -> T.Text
     precToText (TSGN.NamedPrecedence s) = s
-    precToText (TSGN.NumericPrecedence n) = T.pack (show n)
+    precToText (TSGN.NumericPrecedence n)
+      | n < 0 = T.append "neg_" (T.pack $ show (abs n))
+      | otherwise = T.pack (show n)
 
 -- | Extract symbol name identifier.
 symbolIdentifier :: TSGN.Node -> Maybe (T.Text, TSGN.Node)
@@ -180,28 +189,28 @@ extractIdentifierAndNode node =
 -- Returns additional transition points that should be added to InferenceMeta.
 collectNestedChoiceTransitionPoints :: T.Text -> TSGN.Node -> [TransitionPoint TSGN.Node]
 collectNestedChoiceTransitionPoints parentName node = case node of
-    TSGN.Choice members -> concatMap (\(idx, member) -> CHOICE parentName (TSGN.Symbol (parentName <> "_nested_choice")) idx member : collectNestedChoiceTransitionPoints parentName member) (zip [0..] members)
-    TSGN.Seq members -> concatMap (collectNestedChoiceTransitionPoints parentName) members
-    TSGN.Repeat content -> collectNestedChoiceTransitionPoints parentName content
-    TSGN.Repeat1 content -> collectNestedChoiceTransitionPoints parentName content
-    TSGN.Field _ content -> collectNestedChoiceTransitionPoints parentName content
-    TSGN.Alias content _ _ -> collectNestedChoiceTransitionPoints parentName content
-    TSGN.Token content -> collectNestedChoiceTransitionPoints parentName content
-    TSGN.ImmediateToken content -> collectNestedChoiceTransitionPoints parentName content
-    TSGN.Prec _ content -> collectNestedChoiceTransitionPoints parentName content
-    TSGN.PrecLeft _ content -> collectNestedChoiceTransitionPoints parentName content
-    TSGN.PrecRight _ content -> collectNestedChoiceTransitionPoints parentName content
-    TSGN.PrecDynamic _ content -> collectNestedChoiceTransitionPoints parentName content
-    TSGN.Reserved content _ -> collectNestedChoiceTransitionPoints parentName content
-    _ -> []
+  TSGN.Choice members -> concatMap (\(idx, member) -> CHOICE parentName (TSGN.Symbol (parentName <> "_nested_choice")) idx member : collectNestedChoiceTransitionPoints parentName member) (zip [0 ..] members)
+  TSGN.Seq members -> concatMap (collectNestedChoiceTransitionPoints parentName) members
+  TSGN.Repeat content -> collectNestedChoiceTransitionPoints parentName content
+  TSGN.Repeat1 content -> collectNestedChoiceTransitionPoints parentName content
+  TSGN.Field _ content -> collectNestedChoiceTransitionPoints parentName content
+  TSGN.Alias content _ _ -> collectNestedChoiceTransitionPoints parentName content
+  TSGN.Token content -> collectNestedChoiceTransitionPoints parentName content
+  TSGN.ImmediateToken content -> collectNestedChoiceTransitionPoints parentName content
+  TSGN.Prec _ content -> collectNestedChoiceTransitionPoints parentName content
+  TSGN.PrecLeft _ content -> collectNestedChoiceTransitionPoints parentName content
+  TSGN.PrecRight _ content -> collectNestedChoiceTransitionPoints parentName content
+  TSGN.PrecDynamic _ content -> collectNestedChoiceTransitionPoints parentName content
+  TSGN.Reserved content _ -> collectNestedChoiceTransitionPoints parentName content
+  _ -> []
 
 -- | Add transition points for a new rule: SEQ point for the rule itself,
 -- plus CHOICE points for any nested CHOICE nodes.
 addTransitionPointsForNewRule :: InferenceMeta TSGN.Node -> T.Text -> TSGN.Node -> InferenceMeta TSGN.Node
 addTransitionPointsForNewRule meta ruleName node =
-    let seqPoint = SEQ node
-        nestedPoints = collectNestedChoiceTransitionPoints ruleName node
-    in meta { transitionPoints = seqPoint : nestedPoints ++ transitionPoints meta }
+  let seqPoint = SEQ node
+      nestedPoints = collectNestedChoiceTransitionPoints ruleName node
+   in meta {transitionPoints = seqPoint : nestedPoints ++ transitionPoints meta}
 
 -- | Process alternatives of a single rule, generating unique rule names.
 -- Omits index when identifier is unique within the rule.
@@ -216,8 +225,9 @@ processRuleAlternatives ruleName alternatives usedIdents =
       withIdent = map processAlt alternatives
 
       -- Count occurrences of each identifier (Nothing treated as distinct)
-      identCounts = Map.fromListWith (+) $
-                    map (\(_, mbIdent, _) -> (mbIdent, 1 :: Int)) withIdent
+      identCounts =
+        Map.fromListWith (+) $
+          map (\(_, mbIdent, _) -> (mbIdent, 1 :: Int)) withIdent
 
       -- Generate name for a single alternative
       generateName idx mbIdent =
@@ -236,36 +246,43 @@ processRuleAlternatives ruleName alternatives usedIdents =
 
       newRules = map (\(idx, mbIdent, node) -> (generateName idx mbIdent, node)) withIdent
 
-      newIdents = Set.union usedIdents $ Set.fromList $
-                  mapMaybe (\(_, mbIdent, _) -> mbIdent) withIdent
-
-  in (newRules, newIdents)
-
+      newIdents =
+        Set.union usedIdents $
+          Set.fromList $
+            mapMaybe (\(_, mbIdent, _) -> mbIdent) withIdent
+   in (newRules, newIdents)
 
 -- | Create new grammar rules from CHOICE transition points.
 addAlternativeRules :: TSGN.Grammar -> InferenceMeta TSGN.Node -> (TSGN.Grammar, InferenceMeta TSGN.Node)
 addAlternativeRules grammar inferenceMeta =
   let points = transitionPoints inferenceMeta
       -- Filter only CHOICE transition points
-      choicePoints = [tp | tp@CHOICE{} <- points]
+      choicePoints = [tp | tp@CHOICE {} <- points]
 
       -- Group alternatives by rule name
-      groupedByRule = Map.fromListWith (++) $
-                      map (\tp -> case tp of
-                                 CHOICE ruleName _ idx altNode ->
-                                   (ruleName, [(idx, altNode)])
-                                 _ -> error "groupedByRule: expected CHOICE") choicePoints
+      groupedByRule =
+        Map.fromListWith (++) $
+          map
+            ( \tp -> case tp of
+                CHOICE ruleName _ idx altNode ->
+                  (ruleName, [(idx, altNode)])
+                _ -> error "groupedByRule: expected CHOICE"
+            )
+            choicePoints
 
       -- Process each rule's alternatives, accumulating updated inference meta
-      (finalMeta, newRulesList) = Map.foldrWithKey
-          (\ruleName alts (metaAcc, rulesAcc) ->
+      (finalMeta, newRulesList) =
+        Map.foldrWithKey
+          ( \ruleName alts (metaAcc, rulesAcc) ->
               let (newRules', newUsed) = processRuleAlternatives ruleName alts (usedIdentifiers metaAcc)
                   -- Update used identifiers
-                  metaWithUsed = metaAcc { usedIdentifiers = newUsed }
+                  metaWithUsed = metaAcc {usedIdentifiers = newUsed}
                   -- Add transition points for each new rule
                   metaWithPoints = foldl' (\meta (name, node) -> addTransitionPointsForNewRule meta name node) metaWithUsed newRules'
-              in (metaWithPoints, newRules' ++ rulesAcc))
-          (inferenceMeta, []) groupedByRule
+               in (metaWithPoints, newRules' ++ rulesAcc)
+          )
+          (inferenceMeta, [])
+          groupedByRule
 
       -- Convert to list of (String, Node)
       newRules = map (\(name, node) -> (T.unpack name, node)) newRulesList
@@ -273,14 +290,13 @@ addAlternativeRules grammar inferenceMeta =
       -- Add to existing grammar nodes
       existingRules = TSGN.grammarNodes grammar
       updatedRules = Map.fromList newRules `Map.union` existingRules
-
-  in (grammar { TSGN.grammarNodes = updatedRules }, finalMeta)
+   in (grammar {TSGN.grammarNodes = updatedRules}, finalMeta)
 
 -- | Complete transformation pipeline: split CHOICE nodes and create new rules.
 transformGrammarWithChoiceSplitting :: TSGN.Grammar -> TSGN.Grammar
 transformGrammarWithChoiceSplitting grammar =
   let (grammarWithEmptyChoices, inferenceMeta) = splitChoicesInGrammar grammar
-  in fst $ addAlternativeRules grammarWithEmptyChoices inferenceMeta
+   in fst $ addAlternativeRules grammarWithEmptyChoices inferenceMeta
 
 -- | trans
 trans :: TSGN.Grammar -> TSGN.Grammar

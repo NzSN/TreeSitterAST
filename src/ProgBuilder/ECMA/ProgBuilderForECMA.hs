@@ -177,11 +177,9 @@ build name rule parentMap =
               then generateLeafAlternativeEvaluate rule
               else "" -- SyntaticLeaf has its own evaluate()
           else generateEvaluateMethod grammarNodeWithField
-      factoryMethod = generateFactoryMethods (isLeaf rule && not isAlternativeOfChoice) (T.unpack className) fields
       allMethods =
         [constructorDef]
           ++ (if T.null evaluateMethod then [] else [evaluateMethod])
-          ++ (if T.null factoryMethod then [] else [factoryMethod])
       methods = if null allMethods then Nothing else Just $ TT.TArray allMethods
    in T.concat
         [ TT.inst TTS.export_qualifier $
@@ -244,47 +242,6 @@ eval f
 
 collapse' :: [Field] -> [T.Text]
 collapse' = map (\f -> T.concat [eval f, ";\n"])
-
--- | Generate static factory methods for a class
-generateFactoryMethods :: Bool -> String -> [Field] -> T.Text
-generateFactoryMethods isLeafNode className fields =
-  if null fields && not isLeafNode
-    then ""
-    else
-      let methodName = T.pack $ "create" ++ upper_the_first_char className
-          params = generateFactoryParams isLeafNode fields
-          body = generateFactoryBody isLeafNode className fields
-       in TT.inst TTS.static_factory_method methodName params (T.pack className) body
-  where
-    generateFactoryParams :: Bool -> [Field] -> TT.TArray T.Text
-    generateFactoryParams isLeaf fields'
-      | isLeaf = TT.TArray [TT.inst TTS.parameter_declare "value" "string"]
-      | otherwise = TT.TArray $ filter (not . T.null) $ map generateParam fields'
-      where
-        generateParam :: Field -> T.Text
-        generateParam field =
-          case field of
-            Field {} -> TT.inst TTS.parameter_declare (field_name field) (evalFieldType field)
-            SumField {} -> TT.inst TTS.parameter_declare (field_name field) (evalFieldType field)
-            EmptyField -> ""
-
-    generateFactoryBody :: Bool -> String -> [Field] -> T.Text
-    generateFactoryBody isLeaf clsName fields'
-      | isLeaf =
-          let instanceVar = T.pack $ "return new " ++ clsName ++ "(value);"
-           in T.concat [instanceVar, "\n"]
-      | otherwise =
-          let paramNames = filter (not . T.null) $ map fieldName fields'
-              paramList = T.intercalate ", " paramNames
-              instanceVar = T.pack $ "const instance = new " ++ clsName ++ "(" ++ T.unpack paramList ++ ");"
-              returnStmt = T.pack $ "return instance;"
-              stmts = [instanceVar, returnStmt]
-           in T.concat $ map (\s -> T.concat [s, "\n"]) stmts
-      where
-        fieldName :: Field -> T.Text
-        fieldName (Field name _) = name
-        fieldName (SumField name _) = name
-        fieldName EmptyField = ""
 
 -- | Generate evaluate() method for a grammar node
 generateEvaluateMethod :: GrammarNodeWithField -> T.Text
@@ -384,9 +341,10 @@ generateEvaluateMethod node =
           TSGN.PrecDynamic _ content -> findSymbolField content -- Unwrap PREC_DYNAMIC
           TSGN.Reserved content _ -> findSymbolField content -- Unwrap RESERVED
           TSGN.Seq members -> findSymbolFieldInSeq members
-          TSGN.Choice alternatives -> L.find isJust (map findSymbolField alternatives) >>= id
+          TSGN.Choice alts -> L.find isJust (map findSymbolField alts) >>= id
           _ -> Nothing -- BLANK, REPEAT, etc.
-          -- Helper to find a Symbol field in a SEQ, returning the field name but expression from the full SEQ
+
+        -- Helper to find a Symbol field in a SEQ, returning the field name but expression from the full SEQ
         findSymbolFieldInSeq :: [GrammarNodeWithField] -> Maybe (T.Text, T.Text)
         findSymbolFieldInSeq members = do
           -- Find first Symbol in members
@@ -402,8 +360,10 @@ generateEvaluateMethod node =
           case findSymbolField alt of
             Just (fieldName, expr) ->
               -- SYMBOL alternative: check if defined
+              -- Remove redundant inner checks for the same field
               let check = T.concat ["this.", fieldName, " !== undefined"]
-               in T.concat [check, " ? ", expr, " : ", throwExpression "No alternative matched in CHOICE node"]
+                  cleanExpr = removeRedundantCheck fieldName expr
+               in T.concat [check, " ? ", cleanExpr, " : ", throwExpression "No alternative matched in CHOICE node"]
             Nothing ->
               -- Non-SYMBOL alternative (BLANK, etc.): evaluate directly
               evalNodeExpr alt
@@ -411,16 +371,77 @@ generateEvaluateMethod node =
           case findSymbolField alt of
             Just (fieldName, expr) ->
               -- Alternative with checkable field: generate conditional
+              -- Remove redundant inner checks for the same field
               let check = T.concat ["this.", fieldName, " !== undefined"]
+                  cleanExpr = removeRedundantCheck fieldName expr
                   restChain = buildConditionalChain rest
-               in T.concat [check, " ? ", expr, " : ", restChain]
+               in T.concat [check, " ? ", cleanExpr, " : ", restChain]
             Nothing ->
               -- Alternative without checkable field: evaluate directly as fallback
               evalNodeExpr alt
 
+        -- Remove redundant conditional checks for a specific field from an expression
+        -- e.g., "this.x !== undefined ? this.x.evaluate() : ..." becomes "this.x.evaluate()"
+        -- when we already know this.x is defined
+        removeRedundantCheck :: T.Text -> T.Text -> T.Text
+        removeRedundantCheck fieldName expr =
+          -- Simple pattern replacement for the most common redundant check:
+          -- "(this.field !== undefined ? this.field.evaluate() : "")" -> "this.field.evaluate()"
+          -- This handles the case where a CHOICE inside a SEQ has a simple SYMBOL alternative
+          let fieldAccess = T.concat ["this.", fieldName, ".evaluate()"]
+              pattern1 = T.concat ["(this.", fieldName, " !== undefined ? ", fieldAccess, " : \"\")"]
+              pattern2 = T.concat ["this.", fieldName, " !== undefined ? ", fieldAccess, " : \"\""]
+           in if pattern1 `T.isInfixOf` expr
+                then T.replace pattern1 fieldAccess expr
+                else
+                  if pattern2 `T.isInfixOf` expr
+                    then T.replace pattern2 fieldAccess expr
+                    else expr
+
     -- Check if a string is a throw statement (starts with "throw ")
     isThrowStatement :: T.Text -> Bool
     isThrowStatement = T.isPrefixOf "throw "
+
+    -- Check if an expression is a string literal (e.g., "&&" or 'hello')
+    isStringLiteral :: T.Text -> Maybe T.Text
+    isStringLiteral expr
+      | T.length expr >= 2 && T.head expr == '"' && T.last expr == '"' =
+          Just $ T.drop 1 $ T.dropEnd 1 expr -- Extract content between quotes
+      | T.length expr >= 2 && T.head expr == '\'' && T.last expr == '\'' =
+          Just $ T.drop 1 $ T.dropEnd 1 expr
+      | otherwise = Nothing
+
+    -- Build a template literal from a list of expressions
+    -- String literals are embedded directly, expressions are wrapped in ${}
+    -- Falls back to string concatenation if any content contains backticks or ${
+    buildTemplateLiteral :: [T.Text] -> T.Text
+    buildTemplateLiteral [] = "\"\"" -- Empty string
+    buildTemplateLiteral [expr] =
+      case isStringLiteral expr of
+        Just content -> T.concat ["\"", content, "\""] -- Single literal stays as string
+        Nothing -> T.concat ["`", "${", expr, "}", "`"] -- Single expression
+    buildTemplateLiteral exprs =
+      -- Check if any string literal contains backticks or ${ (can't use template literals)
+      if any hasTemplateLiteralConflict exprs
+        then T.intercalate " + " (map formatForConcat exprs)
+        else T.concat ["`", T.concat (map formatPart exprs), "`"]
+      where
+        hasTemplateLiteralConflict :: T.Text -> Bool
+        hasTemplateLiteralConflict e =
+          case isStringLiteral e of
+            Just content -> '`' `elem` T.unpack content || T.isInfixOf "${" content
+            Nothing -> False
+
+        formatPart :: T.Text -> T.Text
+        formatPart expr =
+          case isStringLiteral expr of
+            Just content -> content -- Embed string literal content directly
+            Nothing -> T.concat ["${", expr, "}"] -- Wrap expression in ${}
+        formatForConcat :: T.Text -> T.Text
+        formatForConcat expr =
+          case isStringLiteral expr of
+            Just _ -> expr -- Keep string literal as-is
+            Nothing -> expr -- Keep expression as-is
 
     -- Evaluate a node to an expression (or throw statement)
     evalNodeExpr :: GrammarNodeWithField -> T.Text
@@ -430,7 +451,7 @@ generateEvaluateMethod node =
           let childCalls = map evalNodeExpr members
               containsThrow call = isThrowStatement call
            in case filter containsThrow childCalls of
-                [] -> T.intercalate " + " childCalls
+                [] -> buildTemplateLiteral childCalls
                 (c : _) -> c
         TSGN.Choice alternatives ->
           if null alternatives
@@ -462,12 +483,66 @@ generateEvaluateMethod node =
             else TT.inst TTS.evaluate_method (TT.TArray [T.concat ["return ", expr, ";"]])
 
     -- Generate evaluate() for CHOICE nodes: handle choice resolution
+    -- Uses flat if-else statements for better V8 optimization
     generateChoiceEvaluate :: [GrammarNodeWithField] -> T.Text
     generateChoiceEvaluate alternatives =
-      let expr = evalNodeExpr (TSGN.Choice alternatives)
-       in if isThrowStatement expr
-            then TT.inst TTS.evaluate_method (TT.TArray [expr])
-            else TT.inst TTS.evaluate_method (TT.TArray [T.concat ["return ", expr, ";"]])
+      let statements = buildChoiceIfElseStatements alternatives
+       in TT.inst TTS.evaluate_method (TT.TArray statements)
+      where
+        -- Build flat if-else statements for CHOICE alternatives
+        buildChoiceIfElseStatements :: [GrammarNodeWithField] -> [T.Text]
+        buildChoiceIfElseStatements [] = [throwStatement "No alternative matched in CHOICE node"]
+        buildChoiceIfElseStatements [alt] =
+          -- Last alternative
+          case findSymbolField alt of
+            Just (fieldName, expr) ->
+              -- Last SYMBOL alternative: if check with return or throw
+              [ T.concat ["if (this.", fieldName, " !== undefined) { return ", expr, "; } "],
+                throwStatement "No alternative matched in CHOICE node"
+              ]
+            Nothing ->
+              -- Non-SYMBOL alternative: evaluate directly
+              [T.concat ["return ", evalNodeExpr alt, ";"]]
+        buildChoiceIfElseStatements (alt : rest) =
+          case findSymbolField alt of
+            Just (fieldName, expr) ->
+              -- Alternative with checkable field: generate if statement
+              let ifStmt = T.concat ["if (this.", fieldName, " !== undefined) { return ", expr, "; } "]
+                  restStmts = buildChoiceIfElseStatements rest
+               in ifStmt : restStmts
+            Nothing ->
+              -- Alternative without checkable field: return directly (first match wins)
+              [T.concat ["return ", evalNodeExpr alt, ";"]]
+
+        -- Helper to find SYMBOL field in a node (unwrapping wrappers)
+        -- Returns field name for checking, and full expression for evaluation
+        findSymbolField :: GrammarNodeWithField -> Maybe (T.Text, T.Text)
+        findSymbolField node = case node of
+          TSGN.Symbol annofield ->
+            let fieldName = annoFieldInstanceName annofield
+                expr = evalNodeExpr node
+             in Just (fieldName, expr)
+          TSGN.Field _ content -> findSymbolField content
+          TSGN.Alias content _ _ -> findSymbolField content
+          TSGN.Token content -> findSymbolField content
+          TSGN.ImmediateToken content -> findSymbolField content
+          TSGN.Prec _ content -> findSymbolField content
+          TSGN.PrecLeft _ content -> findSymbolField content
+          TSGN.PrecRight _ content -> findSymbolField content
+          TSGN.PrecDynamic _ content -> findSymbolField content
+          TSGN.Reserved content _ -> findSymbolField content
+          TSGN.Seq members -> findSymbolFieldInSeq members
+          TSGN.Choice alts -> L.find isJust (map findSymbolField alts) >>= id
+          _ -> Nothing
+
+        -- Find a Symbol field in a SEQ
+        findSymbolFieldInSeq :: [GrammarNodeWithField] -> Maybe (T.Text, T.Text)
+        findSymbolFieldInSeq members = do
+          (fieldName, _) <- L.find isJust (map findSymbolField members) >>= id
+          return (fieldName, evalNodeExpr (TSGN.Seq members))
+
+        throwStatement :: T.Text -> T.Text
+        throwStatement msg = T.concat ["throw new Error(\"", msg, "\");"]
 
     -- Generate evaluate() for REPEAT nodes: generate 0-n repetitions
     generateRepeatEvaluate :: GrammarNodeWithField -> T.Text

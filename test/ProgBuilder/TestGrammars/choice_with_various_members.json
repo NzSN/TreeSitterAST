@@ -556,6 +556,57 @@
     "arguments": {
       "type": "SYMBOL",
       "name": "identifier"
+    },
+"variable_declarator": {
+      "type": "SEQ",
+      "members": [
+        {
+          "type": "FIELD",
+          "name": "name",
+          "content": {
+            "type": "CHOICE",
+            "members": [
+              {
+                "type": "SYMBOL",
+                "name": "identifier"
+              },
+              {
+                "type": "ALIAS",
+                "content": {
+                  "type": "STRING",
+                  "value": "of"
+                },
+                "named": true,
+                "value": "identifier"
+              },
+              {
+                "type": "SYMBOL",
+                "name": "_destructuring_pattern"
+              }
+            ]
+          }
+        },
+        {
+          "type": "CHOICE",
+          "members": [
+            {
+              "type": "SYMBOL",
+              "name": "_initializer"
+            },
+            {
+              "type": "BLANK"
+            }
+          ]
+        }
+      ]
+    },
+    "_destructuring_pattern": {
+      "type": "SYMBOL",
+      "name": "identifier"
+    },
+    "_initializer": {
+      "type": "SYMBOL",
+      "name": "identifier"
     }
   }
 }

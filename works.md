@@ -5,5 +5,5 @@
 
 ## Code Generator
 ### Generate of CHOICE node
-- [ ] classes from alternatives of a top-level CHOICE node should 
+- [X] classes from alternatives of a top-level CHOICE node should 
       inherit from class from the top-level CHOICE node.
