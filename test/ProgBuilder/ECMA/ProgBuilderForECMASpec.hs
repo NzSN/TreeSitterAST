@@ -393,7 +393,63 @@ prog_builder_ecma_spec =
             assertBool "Binary_expression_left_addition_T evaluate should contain '+' operator" $
               "+ \"+\" +" `contains` tsCode
             assertBool "Binary_expression_left_logical_and_T evaluate should contain '&&' operator" $
-              "+ \"&&\" +" `contains` tsCode,
+              "+ \"&&\" +" `contains` tsCode
+            -- assignment_expression CHOICE: PREC_RIGHT alternatives (like JavaScript assignment)
+            assertBool "Assignment_expression_T should extend SyntaticInterior" $
+              "class Assignment_expression_T extends SyntaticInterior" `contains` tsCode
+            -- PREC_RIGHT alternatives get named classes using first FIELD name + precedence value
+            assertBool "Assignment_expression_right_assignment_T should extend Assignment_expression_T (PREC_RIGHT =)" $
+              "class Assignment_expression_right_assignment_T extends Assignment_expression_T" `contains` tsCode
+            assertBool "Assignment_expression_right_compound_assignment_T should extend Assignment_expression_T (PREC_RIGHT +=)" $
+              "class Assignment_expression_right_compound_assignment_T extends Assignment_expression_T" `contains` tsCode
+            assertBool "Assignment_expression_right_assignment_T evaluate should contain '=' operator" $
+              "+ \"=\" +" `contains` tsCode
+            -- unary_expression CHOICE: PREC alternatives (like JavaScript unary operators)
+            assertBool "Unary_expression_T should extend SyntaticInterior" $
+              "class Unary_expression_T extends SyntaticInterior" `contains` tsCode
+            -- PREC alternatives get named classes using precedence value
+            assertBool "Unary_expression_unary_T should extend Unary_expression_T (PREC !)" $
+              "class Unary_expression_unary_T extends Unary_expression_T" `contains` tsCode
+            assertBool "Unary_expression_unary_minus_T should extend Unary_expression_T (PREC -)" $
+              "class Unary_expression_unary_minus_T extends Unary_expression_T" `contains` tsCode
+            assertBool "Unary_expression_unary_T evaluate should contain '!' operator" $
+              "\"!\" +" `contains` tsCode
+            -- labeled_statement CHOICE: PREC_DYNAMIC alternatives (like JavaScript labeled statements)
+            assertBool "Labeled_statement_T should extend SyntaticInterior" $
+              "class Labeled_statement_T extends SyntaticInterior" `contains` tsCode
+            -- PREC_DYNAMIC alternatives get named classes with dynamic_{value} pattern
+            assertBool "Labeled_statement_dynamic_-1_T should extend Labeled_statement_T (PREC_DYNAMIC -1)" $
+              "class Labeled_statement_dynamic_-1_T extends Labeled_statement_T" `contains` tsCode
+            assertBool "Labeled_statement_dynamic_-1_T evaluate should contain ':'" $
+              "+ \":\" +" `contains` tsCode
+            -- for_statement CHOICE: ALIAS alternatives (like JavaScript for-in/for-await)
+            assertBool "For_statement_T should extend SyntaticInterior" $
+              "class For_statement_T extends SyntaticInterior" `contains` tsCode
+            -- ALIAS unwraps content, so fields come from the aliased symbol
+            assertBool "For_statement_0_T should extend For_statement_T (SEQ with ALIAS)" $
+              "class For_statement_0_T extends For_statement_T" `contains` tsCode
+            assertBool "For_statement_0_T evaluate should contain 'for' and 'in'" $
+              "\"for\"" `contains` tsCode
+            assertBool "For_statement_1_T evaluate should contain 'await' from ALIAS" $
+              "\"await\"" `contains` tsCode
+            -- nested_choice CHOICE: nested CHOICE as alternative
+            assertBool "Nested_choice_T should extend SyntaticInterior" $
+              "class Nested_choice_T extends SyntaticInterior" `contains` tsCode
+            -- Nested CHOICE alternative gets indexed class
+            assertBool "Nested_choice_1_T should extend Nested_choice_T (nested CHOICE alternative)" $
+              "class Nested_choice_1_T extends Nested_choice_T" `contains` tsCode
+            assertBool "Nested_choice_identifier_T should extend Nested_choice_T (SYMBOL alternative)" $
+              "class Nested_choice_identifier_T extends Nested_choice_T" `contains` tsCode
+            -- array_content CHOICE: REPEAT/REPEAT1 alternatives
+            assertBool "Array_content_T should extend SyntaticInterior" $
+              "class Array_content_T extends SyntaticInterior" `contains` tsCode
+            -- REPEAT/REPEAT1 alternatives get indexed classes
+            assertBool "Array_content_0_T should extend Array_content_T (REPEAT alternative)" $
+              "class Array_content_0_T extends Array_content_T" `contains` tsCode
+            assertBool "Array_content_1_T should extend Array_content_T (REPEAT1 alternative)" $
+              "class Array_content_1_T extends Array_content_T" `contains` tsCode
+            assertBool "Array_content_2_T should extend Array_content_T (BLANK alternative)" $
+              "class Array_content_2_T extends Array_content_T" `contains` tsCode,
       testCase "golden file matches generated TypeScript for JavaScript grammar" $ do
         result <- runMaybeT $ parseGrammarFromFile "sample/grammar.json"
         case result of
