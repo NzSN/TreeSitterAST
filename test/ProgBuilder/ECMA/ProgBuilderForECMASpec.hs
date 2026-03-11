@@ -298,6 +298,102 @@ prog_builder_ecma_spec =
               "class Class_member_method_def_T extends Class_member_T" `contains` tsCode
             assertBool "Class_member_field_def_T should extend Class_member_T" $
               "class Class_member_field_def_T extends Class_member_T" `contains` tsCode,
+      testCase "CHOICE with various member types (SYMBOL, STRING, PATTERN, BLANK, SEQ)" $ do
+        -- Test with grammar having CHOICE nodes with various member types
+        -- Non-SYMBOL alternatives (STRING, PATTERN, BLANK, SEQ) get indexed names (_0, _1, etc.)
+        result <- runMaybeT $ parseGrammarFromFile "test/ProgBuilder/TestGrammars/choice_with_various_members.json"
+        case result of
+          Nothing -> assertFailure "Failed to parse choice_with_various_members.json"
+          Just grammar -> do
+            let tsCode = T.pack $ descript grammar
+            -- expression CHOICE: SYMBOL, STRING, PATTERN, BLANK
+            -- SYMBOL alternative gets named class
+            assertBool "Expression_T should extend SyntaticInterior" $
+              "class Expression_T extends SyntaticInterior" `contains` tsCode
+            assertBool "Expression_identifier_T should extend Expression_T (SYMBOL alternative)" $
+              "class Expression_identifier_T extends Expression_T" `contains` tsCode
+            -- STRING/PATTERN/BLANK alternatives get indexed classes (SyntaticLeaf subclasses)
+            assertBool "Expression_1_T should extend Expression_T (STRING alternative)" $
+              "class Expression_1_T extends Expression_T" `contains` tsCode
+            assertBool "Expression_2_T should extend Expression_T (PATTERN alternative)" $
+              "class Expression_2_T extends Expression_T" `contains` tsCode
+            assertBool "Expression_3_T should extend Expression_T (BLANK alternative)" $
+              "class Expression_3_T extends Expression_T" `contains` tsCode
+            -- statement CHOICE: SYMBOL, SEQ, BLANK
+            assertBool "Statement_T should extend SyntaticInterior" $
+              "class Statement_T extends SyntaticInterior" `contains` tsCode
+            assertBool "Statement_expression_statement_T should extend Statement_T (SYMBOL alternative)" $
+              "class Statement_expression_statement_T extends Statement_T" `contains` tsCode
+            -- SEQ alternative gets indexed class with fields from SEQ members
+            assertBool "Statement_1_T should extend Statement_T (SEQ alternative)" $
+              "class Statement_1_T extends Statement_T" `contains` tsCode
+            -- SEQ alternative should have identifier field from its members
+            assertBool "Statement_1_T should have identifier_0_i field from SEQ" $
+              "identifier_0_i" `contains` tsCode
+            assertBool "Statement_2_T should extend Statement_T (BLANK alternative)" $
+              "class Statement_2_T extends Statement_T" `contains` tsCode
+            -- optional_modifier CHOICE: SYMBOL, BLANK
+            assertBool "Optional_modifier_T should extend SyntaticInterior" $
+              "class Optional_modifier_T extends SyntaticInterior" `contains` tsCode
+            assertBool "Optional_modifier_modifier_T should extend Optional_modifier_T (SYMBOL alternative)" $
+              "class Optional_modifier_modifier_T extends Optional_modifier_T" `contains` tsCode
+            assertBool "Optional_modifier_1_T should extend Optional_modifier_T (BLANK alternative)" $
+              "class Optional_modifier_1_T extends Optional_modifier_T" `contains` tsCode
+            -- complex_expression CHOICE: SYMBOL, SEQ, SEQ
+            assertBool "Complex_expression_T should extend SyntaticInterior" $
+              "class Complex_expression_T extends SyntaticInterior" `contains` tsCode
+            assertBool "Complex_expression_identifier_T should extend Complex_expression_T (SYMBOL alternative)" $
+              "class Complex_expression_identifier_T extends Complex_expression_T" `contains` tsCode
+            -- Both SEQ alternatives get indexed classes
+            assertBool "Complex_expression_1_T should extend Complex_expression_T (first SEQ)" $
+              "class Complex_expression_1_T extends Complex_expression_T" `contains` tsCode
+            assertBool "Complex_expression_2_T should extend Complex_expression_T (second SEQ)" $
+              "class Complex_expression_2_T extends Complex_expression_T" `contains` tsCode
+            -- First SEQ alternative (member_access: identifier "." identifier) should have evaluate with "."
+            assertBool "Complex_expression_1_T evaluate should contain '.' for member access" $
+              "+ \".\" +" `contains` tsCode
+            -- literal_or_blank CHOICE: STRING, STRING, BLANK (no SYMBOL alternatives)
+            assertBool "Literal_or_blank_T should extend SyntaticInterior" $
+              "class Literal_or_blank_T extends SyntaticInterior" `contains` tsCode
+            -- All three alternatives get indexed classes (no SYMBOL to name them)
+            assertBool "Literal_or_blank_0_T should extend Literal_or_blank_T (first STRING)" $
+              "class Literal_or_blank_0_T extends Literal_or_blank_T" `contains` tsCode
+            assertBool "Literal_or_blank_1_T should extend Literal_or_blank_T (second STRING)" $
+              "class Literal_or_blank_1_T extends Literal_or_blank_T" `contains` tsCode
+            assertBool "Literal_or_blank_2_T should extend Literal_or_blank_T (BLANK alternative)" $
+              "class Literal_or_blank_2_T extends Literal_or_blank_T" `contains` tsCode
+            -- STRING/BLANK alternatives should have no constructor parameters and return literal in evaluate()
+            assertBool "Literal_or_blank_0_T should have no-arg constructor (STRING alternative)" $
+              "constructor() { super(); } evaluate()" `contains` tsCode
+            assertBool "Literal_or_blank_0_T evaluate should return 'true'" $
+              "return \"true\";" `contains` tsCode
+            assertBool "Literal_or_blank_1_T evaluate should return 'false'" $
+              "return \"false\";" `contains` tsCode
+            assertBool "Literal_or_blank_2_T evaluate should return empty string (BLANK alternative)" $
+              "evaluate(): string { return \"\";" `contains` tsCode
+            -- binary_expression CHOICE: PREC_LEFT wrapping SEQ with FIELD nodes (like JavaScript grammar)
+            -- This tests PREC_LEFT handling with named fields (left, operator, right)
+            assertBool "Binary_expression_T should extend SyntaticInterior" $
+              "class Binary_expression_T extends SyntaticInterior" `contains` tsCode
+            -- PREC_LEFT alternatives get named classes using first FIELD name + precedence value
+            assertBool "Binary_expression_left_logical_and_T should extend Binary_expression_T (PREC_LEFT &&)" $
+              "class Binary_expression_left_logical_and_T extends Binary_expression_T" `contains` tsCode
+            assertBool "Binary_expression_left_logical_or_T should extend Binary_expression_T (PREC_LEFT ||)" $
+              "class Binary_expression_left_logical_or_T extends Binary_expression_T" `contains` tsCode
+            assertBool "Binary_expression_left_addition_T should extend Binary_expression_T (PREC_LEFT +)" $
+              "class Binary_expression_left_addition_T extends Binary_expression_T" `contains` tsCode
+            assertBool "Binary_expression_left_subtraction_T should extend Binary_expression_T (PREC_LEFT -)" $
+              "class Binary_expression_left_subtraction_T extends Binary_expression_T" `contains` tsCode
+            -- Each alternative should have two identifier fields (left and right, but STRING operator is skipped)
+            assertBool "Binary_expression_left_addition_T should have identifier_0_i field" $
+              "identifier_0_i" `contains` tsCode
+            assertBool "Binary_expression_left_addition_T should have identifier_1_i field" $
+              "identifier_1_i" `contains` tsCode
+            -- evaluate() should contain the operator string
+            assertBool "Binary_expression_left_addition_T evaluate should contain '+' operator" $
+              "+ \"+\" +" `contains` tsCode
+            assertBool "Binary_expression_left_logical_and_T evaluate should contain '&&' operator" $
+              "+ \"&&\" +" `contains` tsCode,
       testCase "golden file matches generated TypeScript for JavaScript grammar" $ do
         result <- runMaybeT $ parseGrammarFromFile "sample/grammar.json"
         case result of

@@ -142,13 +142,23 @@ build name rule parentMap =
   let className = T.pack $ node_type_ident name
       grammarNodeWithField = transformChoiceFields $ toGrammarNodeWithField . toGrammarNodeWithProp $ rule
       fields = extractFields grammarNodeWithField
+      isAlternativeOfChoice = Map.member name parentMap
       (baseClass, constructorDef, fieldDecls) =
         if isLeaf rule
           then
-            ( "SyntaticLeaf",
-              leafConstructor,
-              Nothing
-            )
+            -- Leaf rule: normally extends SyntaticLeaf with value param
+            -- BUT if it's an alternative of a CHOICE, use no-arg constructor
+            if isAlternativeOfChoice
+              then
+                ( "SyntaticLeaf", -- baseClass (will be overridden by finalBaseClass)
+                  leafAlternativeConstructor, -- no-arg constructor
+                  Nothing
+                )
+              else
+                ( "SyntaticLeaf",
+                  leafConstructor,
+                  Nothing
+                )
           else
             ( "SyntaticInterior",
               interiorConstructor fields,
@@ -156,11 +166,18 @@ build name rule parentMap =
             )
       -- If this rule is an alternative of a top-level CHOICE node, inherit from parent CHOICE class
       finalBaseClass =
-        if Map.member name parentMap
+        if isAlternativeOfChoice
           then T.pack $ node_type_ident (parentMap Map.! name)
           else baseClass
-      evaluateMethod = if isLeaf rule then "" else generateEvaluateMethod grammarNodeWithField
-      factoryMethod = generateFactoryMethods (isLeaf rule) (T.unpack className) fields -- TODO: change to fields
+      -- For leaf alternatives of CHOICE, generate evaluate() that returns literal value
+      evaluateMethod =
+        if isLeaf rule
+          then
+            if isAlternativeOfChoice
+              then generateLeafAlternativeEvaluate rule
+              else "" -- SyntaticLeaf has its own evaluate()
+          else generateEvaluateMethod grammarNodeWithField
+      factoryMethod = generateFactoryMethods (isLeaf rule && not isAlternativeOfChoice) (T.unpack className) fields
       allMethods =
         [constructorDef]
           ++ (if T.null evaluateMethod then [] else [evaluateMethod])
@@ -178,6 +195,15 @@ build name rule parentMap =
         TTS.const_declare
         (TT.TArray [TT.inst TTS.parameter_declare "value" "string"])
         (TT.TArray [TT.inst TTS.function_call "super" (Just $ TT.TArray [TT.inst TTS.var_ref "value"])])
+
+    -- Constructor for leaf alternatives (STRING, PATTERN, BLANK) that extend a parent CHOICE class
+    -- No parameters, just calls super()
+    leafAlternativeConstructor :: T.Text
+    leafAlternativeConstructor =
+      TT.inst
+        TTS.const_declare
+        (TT.TArray []) -- no parameters
+        (TT.TArray [TT.inst TTS.function_call "super" Nothing])
 
     interiorConstructor :: [Field] -> T.Text
     interiorConstructor fields =
@@ -484,3 +510,25 @@ generateEvaluateMethod node =
     generateEmptyEvaluate :: T.Text
     generateEmptyEvaluate =
       TT.inst TTS.evaluate_method (TT.TArray ["return \"\";"])
+
+-- | Generate evaluate() method for leaf alternatives (STRING, PATTERN, BLANK)
+-- that extend a parent CHOICE class. These have no fields, so evaluate returns
+-- the literal value directly.
+generateLeafAlternativeEvaluate :: TSGN.Node -> T.Text
+generateLeafAlternativeEvaluate node = case node of
+  TSGN.StringLiteral value ->
+    TT.inst TTS.evaluate_method (TT.TArray [T.concat ["return \"", escapeTypeScriptString value, "\";"]])
+  TSGN.Pattern value ->
+    TT.inst TTS.evaluate_method (TT.TArray [T.concat ["return \"", escapeTypeScriptString value, "\";"]])
+  TSGN.Blank ->
+    TT.inst TTS.evaluate_method (TT.TArray ["return \"\";"])
+  -- For wrapped nodes, unwrap and recurse
+  TSGN.Token content -> generateLeafAlternativeEvaluate content
+  TSGN.ImmediateToken content -> generateLeafAlternativeEvaluate content
+  TSGN.Alias content _ _ -> generateLeafAlternativeEvaluate content
+  TSGN.Prec _ content -> generateLeafAlternativeEvaluate content
+  TSGN.PrecLeft _ content -> generateLeafAlternativeEvaluate content
+  TSGN.PrecRight _ content -> generateLeafAlternativeEvaluate content
+  TSGN.PrecDynamic _ content -> generateLeafAlternativeEvaluate content
+  TSGN.Reserved content _ -> generateLeafAlternativeEvaluate content
+  _ -> TT.inst TTS.evaluate_method (TT.TArray ["return \"\";"]) -- fallback

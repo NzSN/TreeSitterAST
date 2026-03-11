@@ -211,8 +211,7 @@ export class _lhs_expression_subscript_expression_T extends _lhs_expression_T { 
 return instance;
  } }
 export class _module_export_name_T extends SyntaticInterior {  constructor() { super(); } evaluate(): string { throw new Error("Cannot evaluate CHOICE node: missing alternative") } }
-export class _module_export_name_2_T extends _module_export_name_T {  constructor(value : string) { super(value); } static create_module_export_name_2_t(value : string): _module_export_name_2_T { return new _module_export_name_2_T(value);
- } }
+export class _module_export_name_2_T extends _module_export_name_T {  constructor() { super(); } evaluate(): string { return "default"; } }
 export class _module_export_name_identifier_T extends _module_export_name_T { identifier_0_i : Identifier_T;
  constructor(identifier_0 : Identifier_T) { super();this.identifier_0_i = identifier_0; } evaluate(): string { return this.identifier_0_i.evaluate(); } static create_module_export_name_identifier_t(identifier_0 : Identifier_T): _module_export_name_identifier_T { const instance = new _module_export_name_identifier_T(identifier_0);
 return instance;
@@ -231,24 +230,16 @@ export class _property_name_T extends SyntaticInterior { identifier_0_i : Identi
 return instance;
  } }
 export class _reserved_identifier_T extends SyntaticInterior {  constructor() { super(); } evaluate(): string { throw new Error("Cannot evaluate CHOICE node: missing alternative") } }
-export class _reserved_identifier_0_T extends _reserved_identifier_T {  constructor(value : string) { super(value); } static create_reserved_identifier_0_t(value : string): _reserved_identifier_0_T { return new _reserved_identifier_0_T(value);
- } }
-export class _reserved_identifier_1_T extends _reserved_identifier_T {  constructor(value : string) { super(value); } static create_reserved_identifier_1_t(value : string): _reserved_identifier_1_T { return new _reserved_identifier_1_T(value);
- } }
-export class _reserved_identifier_2_T extends _reserved_identifier_T {  constructor(value : string) { super(value); } static create_reserved_identifier_2_t(value : string): _reserved_identifier_2_T { return new _reserved_identifier_2_T(value);
- } }
-export class _reserved_identifier_3_T extends _reserved_identifier_T {  constructor(value : string) { super(value); } static create_reserved_identifier_3_t(value : string): _reserved_identifier_3_T { return new _reserved_identifier_3_T(value);
- } }
-export class _reserved_identifier_4_T extends _reserved_identifier_T {  constructor(value : string) { super(value); } static create_reserved_identifier_4_t(value : string): _reserved_identifier_4_T { return new _reserved_identifier_4_T(value);
- } }
-export class _reserved_identifier_5_T extends _reserved_identifier_T {  constructor(value : string) { super(value); } static create_reserved_identifier_5_t(value : string): _reserved_identifier_5_T { return new _reserved_identifier_5_T(value);
- } }
-export class _reserved_identifier_6_T extends _reserved_identifier_T {  constructor(value : string) { super(value); } static create_reserved_identifier_6_t(value : string): _reserved_identifier_6_T { return new _reserved_identifier_6_T(value);
- } }
+export class _reserved_identifier_0_T extends _reserved_identifier_T {  constructor() { super(); } evaluate(): string { return "get"; } }
+export class _reserved_identifier_1_T extends _reserved_identifier_T {  constructor() { super(); } evaluate(): string { return "set"; } }
+export class _reserved_identifier_2_T extends _reserved_identifier_T {  constructor() { super(); } evaluate(): string { return "async"; } }
+export class _reserved_identifier_3_T extends _reserved_identifier_T {  constructor() { super(); } evaluate(): string { return "await"; } }
+export class _reserved_identifier_4_T extends _reserved_identifier_T {  constructor() { super(); } evaluate(): string { return "static"; } }
+export class _reserved_identifier_5_T extends _reserved_identifier_T {  constructor() { super(); } evaluate(): string { return "export"; } }
+export class _reserved_identifier_6_T extends _reserved_identifier_T {  constructor() { super(); } evaluate(): string { return "let"; } }
 export class _semicolon_T extends SyntaticInterior {  constructor() { super(); } evaluate(): string { throw new Error("Cannot evaluate CHOICE node: missing alternative") } }
 export class _semicolon_0_T extends _semicolon_T {  constructor() { super(); } evaluate(): string { return ""; } }
-export class _semicolon_1_T extends _semicolon_T {  constructor(value : string) { super(value); } static create_semicolon_1_t(value : string): _semicolon_1_T { return new _semicolon_1_T(value);
- } }
+export class _semicolon_1_T extends _semicolon_T {  constructor() { super(); } evaluate(): string { return ";"; } }
 export class Arguments_T extends SyntaticInterior { expression_0_i : Expression_T | undefined;
  spread_element_1_i : Spread_element_T | undefined;
  expression_2_i : Expression_T | undefined;
