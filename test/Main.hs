@@ -2,6 +2,7 @@ module Main (main) where
 
 import Fundamentals.InferenceSpec (inference_spec)
 import ProgBuilder.ECMA.ProgBuilderForECMASpec (prog_builder_ecma_spec)
+import ProgBuilder.ECMA.SentenceGenerationSpec (sentence_generation_spec)
 import ProgBuilderUtilitiesSpec (prog_builder_utilities_spec)
 import StringEscapingTest (stringEscapingTests)
 import Template.TypeScriptTemplateSpec
@@ -18,4 +19,11 @@ unitTests :: TestTree
 unitTests =
   testGroup
     "Unit tests"
-    [template_testcase, grammar_nodes_spec, prog_builder_utilities_spec, prog_builder_ecma_spec, inference_spec, stringEscapingTests]
+    [ template_testcase,
+      grammar_nodes_spec,
+      prog_builder_utilities_spec,
+      prog_builder_ecma_spec,
+      sentence_generation_spec,
+      inference_spec,
+      stringEscapingTests
+    ]
