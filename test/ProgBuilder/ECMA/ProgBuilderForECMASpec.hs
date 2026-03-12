@@ -16,6 +16,29 @@ import TreeSitterGrammarNodes (parseGrammarFromFile)
 contains :: T.Text -> T.Text -> Bool
 contains = T.isInfixOf
 
+-- | Helper to assert that generated TypeScript code compiles with tsc
+-- Writes the code to a temp file and runs tsc --noEmit to verify compilation
+assertTypeScriptCompiles :: T.Text -> String -> Assertion
+assertTypeScriptCompiles tsCode testName = do
+  -- Use test name in temp file to avoid conflicts when running tests in parallel
+  let sanitizedTestName = map (\c -> if c `elem` (" -" :: String) then '_' else c) testName
+      tempFile = "/tmp/test_ts_" ++ sanitizedTestName ++ ".ts"
+  TIO.writeFile tempFile tsCode
+  (exitCode, stdout, stderr) <- readProcessWithExitCode "tsc" ["--noEmit", "--target", "ES2020", tempFile] ""
+  case exitCode of
+    ExitSuccess -> return ()
+    ExitFailure code -> do
+      let errorMsg =
+            "TypeScript compilation failed with exit code "
+              ++ show code
+              ++ "\nstdout: "
+              ++ stdout
+              ++ "\nstderr: "
+              ++ stderr
+              ++ "\n\nGenerated code:\n"
+              ++ T.unpack tsCode
+      assertFailure errorMsg
+
 prog_builder_ecma_spec :: TestTree
 prog_builder_ecma_spec =
   testGroup
@@ -44,7 +67,9 @@ prog_builder_ecma_spec =
               "class SyntaticLeaf" `contains` tsCode
 
             assertBool "Should contain SyntaticInterior class" $
-              "class SyntaticInterior" `contains` tsCode,
+              "class SyntaticInterior" `contains` tsCode
+            -- Verify generated code compiles with tsc
+            assertTypeScriptCompiles tsCode "javascript_grammar",
       testCase "SEQ nodes generate sequential field suffixes" $ do
         result <- runMaybeT $ parseGrammarFromFile "test/ProgBuilder/TestGrammars/simple_seq.json"
         case result of
@@ -58,7 +83,9 @@ prog_builder_ecma_spec =
               "_1_i" `contains` tsCode
             -- Should generate a class for test_seq
             assertBool "Should generate Test_seq_T class" $
-              "class Test_seq_T" `contains` tsCode,
+              "class Test_seq_T" `contains` tsCode
+            -- Verify generated code compiles with tsc
+            assertTypeScriptCompiles tsCode "SEQ_nodes_generate_sequential_field_suffixes",
       testCase "CHOICE nodes generate alternative classes" $ do
         result <- runMaybeT $ parseGrammarFromFile "test/ProgBuilder/TestGrammars/simple_choice.json"
         case result of
@@ -71,7 +98,9 @@ prog_builder_ecma_spec =
             assertBool "Should generate Test_choice_option_a_T class" $
               "class Test_choice_option_a_T" `contains` tsCode
             assertBool "Should generate Test_choice_option_b_T class" $
-              "class Test_choice_option_b_T" `contains` tsCode,
+              "class Test_choice_option_b_T" `contains` tsCode
+            -- Verify generated code compiles with tsc
+            assertTypeScriptCompiles tsCode "CHOICE_nodes_generate_alternative_classes",
       testCase "PATTERN nodes generate SyntaticLeaf classes" $ do
         result <- runMaybeT $ parseGrammarFromFile "test/ProgBuilder/TestGrammars/pattern_leaf.json"
         case result of
@@ -83,7 +112,9 @@ prog_builder_ecma_spec =
               "extends SyntaticLeaf" `contains` tsCode
             -- Should generate a class for test_pattern
             assertBool "Should generate Test_pattern_T class" $
-              "class Test_pattern_T" `contains` tsCode,
+              "class Test_pattern_T" `contains` tsCode
+            -- Verify generated code compiles with tsc
+            assertTypeScriptCompiles tsCode "PATTERN_nodes_generate_SyntaticLeaf_classes",
       testCase "SEQ nodes preserve member order in evaluate() method" $ do
         result <- runMaybeT $ parseGrammarFromFile "test/ProgBuilder/TestGrammars/seq_three.json"
         case result of
@@ -95,17 +126,15 @@ prog_builder_ecma_spec =
             assertBool "Should contain first_0_i.evaluate() then second_1_i.evaluate() in template literal" $
               "first_0_i.evaluate()}${this.second_1_i.evaluate()" `contains` tsCode
             assertBool "Should contain second_1_i.evaluate() then third_2_i.evaluate() in template literal" $
-              "second_1_i.evaluate()}${this.third_2_i.evaluate()" `contains` tsCode,
+              "second_1_i.evaluate()}${this.third_2_i.evaluate()" `contains` tsCode
+            -- Verify generated code compiles with tsc
+            assertTypeScriptCompiles tsCode "SEQ_nodes_preserve_member_order_in_evaluate",
       testCase "CHOICE nodes with named fields preserve alternative order in evaluate()" $ do
         result <- runMaybeT $ parseGrammarFromFile "test/ProgBuilder/TestGrammars/choice_named.json"
         case result of
           Nothing -> assertFailure "Failed to parse choice_named.json"
           Just grammar -> do
             let tsCode = T.pack $ descript grammar
-            -- Debug output
-            putStrLn "=== Generated TypeScript for choice_named ==="
-            putStrLn (T.unpack tsCode)
-            putStrLn "=== End ==="
             -- TODO: Branch unification currently not working for FIELD nodes inside CHOICE.
             -- Should contain union type with undefined (disabled for now)
             -- assertBool "Should contain union type with undefined" $
@@ -131,7 +160,9 @@ prog_builder_ecma_spec =
             -- This is complex to test with simple string matching,
             -- but we can check basic structure
             assertBool "Should contain evaluate method" $
-              "evaluate(): string" `contains` tsCode,
+              "evaluate(): string" `contains` tsCode
+            -- Verify generated code compiles with tsc
+            assertTypeScriptCompiles tsCode "CHOICE_nodes_with_named_fields",
       testCase "CHOICE alternatives inherit from parent CHOICE class" $ do
         -- Test with simple grammar
         result <- runMaybeT $ parseGrammarFromFile "test/ProgBuilder/TestGrammars/simple_choice.json"
@@ -146,7 +177,9 @@ prog_builder_ecma_spec =
             assertBool "Alternative Test_choice_option_a_T should extend Test_choice_T" $
               "class Test_choice_option_a_T extends Test_choice_T" `contains` tsCode
             assertBool "Alternative Test_choice_option_b_T should extend Test_choice_T" $
-              "class Test_choice_option_b_T extends Test_choice_T" `contains` tsCode,
+              "class Test_choice_option_b_T extends Test_choice_T" `contains` tsCode
+            -- Verify generated code compiles with tsc
+            assertTypeScriptCompiles tsCode "CHOICE_alternatives_inherit_from_parent",
       testCase "complex CHOICE inheritance with multiple parent classes" $ do
         -- Test with complex grammar having multiple CHOICE nodes
         result <- runMaybeT $ parseGrammarFromFile "test/ProgBuilder/TestGrammars/complex_choice_inheritance.json"
@@ -180,7 +213,9 @@ prog_builder_ecma_spec =
             assertBool "_simple_type_primitive_type_T should extend _simple_type_T" $
               "class _simple_type_primitive_type_T extends _simple_type_T" `contains` tsCode
             assertBool "_simple_type_array_type_T should extend _simple_type_T" $
-              "class _simple_type_array_type_T extends _simple_type_T" `contains` tsCode,
+              "class _simple_type_array_type_T extends _simple_type_T" `contains` tsCode
+            -- Verify generated code compiles with tsc
+            assertTypeScriptCompiles tsCode "complex_CHOICE_inheritance_multiple_parents",
       testCase "real-world CHOICE inheritance from JavaScript grammar" $ do
         -- Test with actual JavaScript grammar which has edge cases like double underscores
         result <- runMaybeT $ parseGrammarFromFile "sample/grammar.json"
@@ -205,7 +240,9 @@ prog_builder_ecma_spec =
             assertBool "_destructuring_pattern_array_pattern_T should extend _destructuring_pattern_T" $
               "class _destructuring_pattern_array_pattern_T extends _destructuring_pattern_T" `contains` tsCode
             assertBool "_destructuring_pattern_object_pattern_T should extend _destructuring_pattern_T" $
-              "class _destructuring_pattern_object_pattern_T extends _destructuring_pattern_T" `contains` tsCode,
+              "class _destructuring_pattern_object_pattern_T extends _destructuring_pattern_T" `contains` tsCode
+            -- Verify generated code compiles with tsc
+            assertTypeScriptCompiles tsCode "real_world_CHOICE_inheritance_JavaScript_grammar",
       testCase "nested CHOICE and SEQ inheritance" $ do
         -- Test with grammar having nested CHOICE inside SEQ
         result <- runMaybeT $ parseGrammarFromFile "test/ProgBuilder/TestGrammars/nested_choice.json"
@@ -239,7 +276,9 @@ prog_builder_ecma_spec =
             assertBool "Statement_while_statement_T should extend Statement_T" $
               "class Statement_while_statement_T extends Statement_T" `contains` tsCode
             assertBool "Statement_block_statement_T should extend Statement_T" $
-              "class Statement_block_statement_T extends Statement_T" `contains` tsCode,
+              "class Statement_block_statement_T extends Statement_T" `contains` tsCode
+            -- Verify generated code compiles with tsc
+            assertTypeScriptCompiles tsCode "nested_CHOICE_and_SEQ_inheritance",
       testCase "deeply nested CHOICE/SEQ with multiple inheritance levels" $ do
         -- Test with complex grammar having deeply nested structures
         result <- runMaybeT $ parseGrammarFromFile "test/ProgBuilder/TestGrammars/deeply_nested.json"
@@ -300,7 +339,9 @@ prog_builder_ecma_spec =
             assertBool "Class_member_method_def_T should extend Class_member_T" $
               "class Class_member_method_def_T extends Class_member_T" `contains` tsCode
             assertBool "Class_member_field_def_T should extend Class_member_T" $
-              "class Class_member_field_def_T extends Class_member_T" `contains` tsCode,
+              "class Class_member_field_def_T extends Class_member_T" `contains` tsCode
+            -- Verify generated code compiles with tsc
+            assertTypeScriptCompiles tsCode "deeply_nested_CHOICE_SEQ_multiple_inheritance",
       testCase "CHOICE with various member types (SYMBOL, STRING, PATTERN, BLANK, SEQ)" $ do
         -- Test with grammar having CHOICE nodes with various member types
         -- Non-SYMBOL alternatives (STRING, PATTERN, BLANK, SEQ) get indexed names (_0, _1, etc.)
@@ -453,7 +494,9 @@ prog_builder_ecma_spec =
             assertBool "Array_content_1_T should extend Array_content_T (REPEAT1 alternative)" $
               "class Array_content_1_T extends Array_content_T" `contains` tsCode
             assertBool "Array_content_2_T should extend Array_content_T (BLANK alternative)" $
-              "class Array_content_2_T extends Array_content_T" `contains` tsCode,
+              "class Array_content_2_T extends Array_content_T" `contains` tsCode
+            -- Verify generated code compiles with tsc
+            assertTypeScriptCompiles tsCode "CHOICE_with_various_member_types",
       testCase "golden file matches generated TypeScript for JavaScript grammar" $ do
         result <- runMaybeT $ parseGrammarFromFile "sample/grammar.json"
         case result of
@@ -461,7 +504,9 @@ prog_builder_ecma_spec =
           Just grammar -> do
             let generated = T.pack $ descript grammar
             golden <- TIO.readFile "test/fixtures/javascript_template.golden.ts"
-            assertEqual "Generated TypeScript should match golden file" golden generated,
+            assertEqual "Generated TypeScript should match golden file" golden generated
+            -- Verify generated code compiles with tsc
+            assertTypeScriptCompiles generated "golden_file_matches_generated_TypeScript",
       testCase "generated TypeScript compiles with tsc (TypeScript compiler)" $ do
         -- Generate TypeScript from test grammar with various patterns
         result <- runMaybeT $ parseGrammarFromFile "test/ProgBuilder/TestGrammars/choice_with_various_members.json"
@@ -469,22 +514,6 @@ prog_builder_ecma_spec =
           Nothing -> assertFailure "Failed to parse choice_with_various_members.json"
           Just grammar -> do
             let tsCode = T.pack $ descript grammar
-            -- Write to temporary file
-            let tempFile = "/tmp/test_ts_compilation.ts"
-            TIO.writeFile tempFile tsCode
-            -- Run tsc to check compilation (use --target ES2020 for compatibility)
-            (exitCode, stdout, stderr) <- readProcessWithExitCode "tsc" ["--noEmit", "--target", "ES2020", tempFile] ""
-            case exitCode of
-              ExitSuccess -> return ()
-              ExitFailure code -> do
-                let errorMsg =
-                      "TypeScript compilation failed with exit code "
-                        ++ show code
-                        ++ "\nstdout: "
-                        ++ stdout
-                        ++ "\nstderr: "
-                        ++ stderr
-                        ++ "\n\nGenerated code:\n"
-                        ++ T.unpack tsCode
-                assertFailure errorMsg
+            -- Verify generated code compiles with tsc
+            assertTypeScriptCompiles tsCode "generated_TypeScript_compiles_with_tsc"
     ]
