@@ -8,6 +8,7 @@ import StringEscapingTest (stringEscapingTests)
 import Template.TypeScriptTemplateSpec
 import Test.Tasty
 import TreeSitterGrammarNodesSpec (grammar_nodes_spec)
+import Utilities.TemplateEvalIteratorSpec (template_eval_iterator_spec)
 
 main :: IO ()
 main = defaultMain tests
@@ -24,6 +25,7 @@ unitTests =
       prog_builder_utilities_spec,
       prog_builder_ecma_spec,
       sentence_generation_spec,
+      template_eval_iterator_spec,
       inference_spec,
       stringEscapingTests
     ]

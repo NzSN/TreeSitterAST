@@ -146,17 +146,20 @@ build name rule parentMap =
       (baseClass, constructorDef, fieldDecls) =
         if isLeaf rule
           then
-            -- Leaf rule: normally extends SyntaticLeaf with value param
-            -- BUT if it's an alternative of a CHOICE, use no-arg constructor
+            -- Leaf rules: generate constructor based on whether it's a CHOICE alternative
             if isAlternativeOfChoice
               then
-                ( "SyntaticLeaf", -- baseClass (will be overridden by finalBaseClass)
-                  leafAlternativeConstructor, -- no-arg constructor
+                -- Leaf as CHOICE alternative: extends parent CHOICE class
+                -- No-arg constructor, evaluate() returns literal
+                ( "SyntaticLeaf", -- will be overridden by finalBaseClass
+                  leafAlternativeConstructor,
                   Nothing
                 )
               else
+                -- Regular leaf (not CHOICE alternative): extends SyntaticLeaf
+                -- Constructor depends on leaf type
                 ( "SyntaticLeaf",
-                  leafConstructor,
+                  generateLeafConstructor rule,
                   Nothing
                 )
           else
@@ -169,7 +172,10 @@ build name rule parentMap =
         if isAlternativeOfChoice
           then T.pack $ node_type_ident (parentMap Map.! name)
           else baseClass
-      -- For leaf alternatives of CHOICE, generate evaluate() that returns literal value
+      -- evaluate() method:
+      -- - Leaf as CHOICE alternative: generate evaluate() that returns literal
+      -- - Regular leaf: use SyntaticLeaf's evaluate()
+      -- - Interior: generate custom evaluate()
       evaluateMethod =
         if isLeaf rule
           then
@@ -187,21 +193,62 @@ build name rule parentMap =
           "\n"
         ]
   where
-    leafConstructor :: T.Text
-    leafConstructor =
-      TT.inst
-        TTS.const_declare
-        (TT.TArray [TT.inst TTS.parameter_declare "value" "string"])
-        (TT.TArray [TT.inst TTS.function_call "super" (Just $ TT.TArray [TT.inst TTS.var_ref "value"])])
+    -- \| Generate constructor for regular leaf nodes (not CHOICE alternatives)
+    -- StringLiteral/Blank/Token: no-arg constructor, pass literal to super()
+    -- Pattern: accept value parameter, validate against pattern, pass to super()
+    generateLeafConstructor :: TSGN.Node -> T.Text
+    generateLeafConstructor node = case node of
+      TSGN.StringLiteral value ->
+        -- StringLiteral: no-arg constructor, pass literal to super()
+        T.concat
+          [ "constructor() { super(\"",
+            escapeTypeScriptString value,
+            "\"); }"
+          ]
+      TSGN.Pattern pattern ->
+        -- Pattern: accept value, validate against pattern regex, pass to super()
+        let regexPattern = patternToRegex pattern
+         in T.concat
+              [ "constructor(value: string) {\n",
+                "  if (!",
+                regexPattern,
+                ".test(value)) {\n",
+                "    throw new Error(`Value '${value}' does not match pattern '",
+                escapeTypeScriptString pattern,
+                "'`);\n",
+                "  }\n",
+                "  super(value);\n",
+                "}"
+              ]
+      TSGN.Blank ->
+        -- Blank: no-arg constructor, pass empty string to super()
+        "constructor() { super(\"\"); }"
+      -- Wrapper nodes: unwrap and generate constructor for inner content
+      TSGN.Token content -> generateLeafConstructor content
+      TSGN.ImmediateToken content -> generateLeafConstructor content
+      TSGN.Alias content _ _ -> generateLeafConstructor content
+      TSGN.Prec _ content -> generateLeafConstructor content
+      TSGN.PrecLeft _ content -> generateLeafConstructor content
+      TSGN.PrecRight _ content -> generateLeafConstructor content
+      TSGN.PrecDynamic _ content -> generateLeafConstructor content
+      TSGN.Reserved content _ -> generateLeafConstructor content
+      _ ->
+        -- Fallback: no-arg constructor (should not happen for valid leaf nodes)
+        "constructor() { super(\"\"); }"
 
-    -- Constructor for leaf alternatives (STRING, PATTERN, BLANK) that extend a parent CHOICE class
-    -- No parameters, just calls super()
+    -- \| Constructor for leaf alternatives of CHOICE nodes
+    -- No parameters, just calls super() on parent CHOICE class
     leafAlternativeConstructor :: T.Text
     leafAlternativeConstructor =
       TT.inst
         TTS.const_declare
         (TT.TArray []) -- no parameters
         (TT.TArray [TT.inst TTS.function_call "super" Nothing])
+
+    -- \| Convert a Tree-sitter pattern to a JavaScript RegExp
+    patternToRegex :: T.Text -> T.Text
+    patternToRegex pattern =
+      T.concat ["/^", pattern, "$/"]
 
     interiorConstructor :: [Field] -> T.Text
     interiorConstructor fields =
@@ -481,7 +528,7 @@ generateEvaluateMethod node =
       let expr = evalAnnoatedFieldExpr annofield
        in if isThrowStatement expr
             then TT.inst TTS.evaluate_method (TT.TArray [expr])
-            else TT.inst TTS.evaluate_method (TT.TArray [T.concat ["return ", expr, ";"]])
+            else TT.inst TTS.evaluate_method (TT.TArray [T.concat ["return ", "\"", expr, "\"", ";"]])
 
     -- Generate evaluate() for BLANK nodes: return empty string
     generateBlankEvaluate :: T.Text

@@ -301,7 +301,7 @@ export class Class_heritage_T extends SyntaticInterior { expression_0_i : Expres
  constructor(expression_0 : Expression_T) { super();this.expression_0_i = expression_0; } evaluate(): string { return `extends${this.expression_0_i.evaluate()}`; } }
 export class Class_static_block_T extends SyntaticInterior { statement_block_0_i : Statement_block_T;
  constructor(statement_block_0 : Statement_block_T) { super();this.statement_block_0_i = statement_block_0; } evaluate(): string { return `static${(() => { return ""; })()}${this.statement_block_0_i.evaluate()}`; } }
-export class Comment_T extends SyntaticLeaf {  constructor(value : string) { super(value); } }
+export class Comment_T extends SyntaticLeaf {  constructor() { super(""); } }
 export class Computed_property_name_T extends SyntaticInterior { expression_0_i : Expression_T;
  constructor(expression_0 : Expression_T) { super();this.expression_0_i = expression_0; } evaluate(): string { return `[${this.expression_0_i.evaluate()}]`; } }
 export class Continue_statement_T extends SyntaticInterior { identifier_0_i : Identifier_T | undefined;
@@ -340,8 +340,8 @@ export class Do_statement_T extends SyntaticInterior { statement_0_i : Statement
  constructor(statement_0 : Statement_T,parenthesized_expression_1 : Parenthesized_expression_T,_semicolon_2 : _semicolon_T | undefined) { super();this.statement_0_i = statement_0;this.parenthesized_expression_1_i = parenthesized_expression_1;this._semicolon_2_i = _semicolon_2; } evaluate(): string { return `do${this.statement_0_i.evaluate()}while${this.parenthesized_expression_1_i.evaluate()}${(() => { if (this._semicolon_2_i !== undefined) { return this._semicolon_2_i.evaluate(); } return ""; })()}`; } }
 export class Else_clause_T extends SyntaticInterior { statement_0_i : Statement_T;
  constructor(statement_0 : Statement_T) { super();this.statement_0_i = statement_0; } evaluate(): string { return `else${this.statement_0_i.evaluate()}`; } }
-export class Empty_statement_T extends SyntaticLeaf {  constructor(value : string) { super(value); } }
-export class Escape_sequence_T extends SyntaticLeaf {  constructor(value : string) { super(value); } }
+export class Empty_statement_T extends SyntaticLeaf {  constructor() { super(";"); } }
+export class Escape_sequence_T extends SyntaticLeaf {  constructor() { super(""); } }
 export class Export_clause_T extends SyntaticInterior { export_specifier_0_i : Export_specifier_T | undefined;
  export_specifier_1_i : Export_specifier_T | undefined;
  constructor(export_specifier_0 : Export_specifier_T | undefined,export_specifier_1 : Export_specifier_T | undefined) { super();this.export_specifier_0_i = export_specifier_0;this.export_specifier_1_i = export_specifier_1; } evaluate(): string { return `{${(() => { if (this.export_specifier_0_i !== undefined) { return `${this.export_specifier_0_i.evaluate()}${`,${this.export_specifier_1_i.evaluate()}`}`; } return ""; })()}${(() => { return ","; })()}}`; } }
@@ -389,7 +389,7 @@ export class Expression_update_expression_T extends Expression_T { update_expres
  constructor(update_expression_0 : Update_expression_T) { super();this.update_expression_0_i = update_expression_0; } evaluate(): string { return this.update_expression_0_i.evaluate(); } }
 export class Expression_yield_expression_T extends Expression_T { yield_expression_0_i : Yield_expression_T;
  constructor(yield_expression_0 : Yield_expression_T) { super();this.yield_expression_0_i = yield_expression_0; } evaluate(): string { return this.yield_expression_0_i.evaluate(); } }
-export class False_T extends SyntaticLeaf {  constructor(value : string) { super(value); } }
+export class False_T extends SyntaticLeaf {  constructor() { super("false"); } }
 export class Field_definition_T extends SyntaticInterior { decorator_0_i : Decorator_T;
  _property_name_1_i : _property_name_T;
  _initializer_2_i : _initializer_T | undefined;
@@ -427,14 +427,24 @@ export class Generator_function_declaration_T extends SyntaticInterior { identif
  _call_signature_1_i : _call_signature_T;
  statement_block_2_i : Statement_block_T;
  constructor(identifier_0 : Identifier_T,_call_signature_1 : _call_signature_T,statement_block_2 : Statement_block_T) { super();this.identifier_0_i = identifier_0;this._call_signature_1_i = _call_signature_1;this.statement_block_2_i = statement_block_2; } evaluate(): string { return `${(() => { return "async"; })()}function*${this.identifier_0_i.evaluate()}${this._call_signature_1_i.evaluate()}${this.statement_block_2_i.evaluate()}${(() => { return ""; })()}`; } }
-export class Hash_bang_line_T extends SyntaticLeaf {  constructor(value : string) { super(value); } }
-export class Html_character_reference_T extends SyntaticLeaf {  constructor(value : string) { super(value); } }
-export class Identifier_T extends SyntaticLeaf {  constructor(value : string) { super(value); } }
+export class Hash_bang_line_T extends SyntaticLeaf {  constructor(value: string) {
+  if (!/^#!.*$/.test(value)) {
+    throw new Error(`Value '${value}' does not match pattern '#!.*'`);
+  }
+  super(value);
+} }
+export class Html_character_reference_T extends SyntaticLeaf {  constructor(value: string) {
+  if (!/^&(#([xX][0-9a-fA-F]{1,6}|[0-9]{1,5})|[A-Za-z]{1,30});$/.test(value)) {
+    throw new Error(`Value '${value}' does not match pattern '&(#([xX][0-9a-fA-F]{1,6}|[0-9]{1,5})|[A-Za-z]{1,30});'`);
+  }
+  super(value);
+} }
+export class Identifier_T extends SyntaticLeaf {  constructor() { super(""); } }
 export class If_statement_T extends SyntaticInterior { parenthesized_expression_0_i : Parenthesized_expression_T;
  statement_1_i : Statement_T;
  else_clause_2_i : Else_clause_T | undefined;
  constructor(parenthesized_expression_0 : Parenthesized_expression_T,statement_1 : Statement_T,else_clause_2 : Else_clause_T | undefined) { super();this.parenthesized_expression_0_i = parenthesized_expression_0;this.statement_1_i = statement_1;this.else_clause_2_i = else_clause_2; } evaluate(): string { return `if${this.parenthesized_expression_0_i.evaluate()}${this.statement_1_i.evaluate()}${(() => { if (this.else_clause_2_i !== undefined) { return this.else_clause_2_i.evaluate(); } return ""; })()}`; } }
-export class Import_T extends SyntaticLeaf {  constructor(value : string) { super(value); } }
+export class Import_T extends SyntaticLeaf {  constructor() { super("import"); } }
 export class Import_attribute_T extends SyntaticInterior { object_0_i : Object_T;
  constructor(object_0 : Object_T) { super();this.object_0_i = object_0; } evaluate(): string { return `with${this.object_0_i.evaluate()}`; } }
 export class Import_clause_T extends SyntaticInterior {  constructor() { super(); } evaluate(): string { throw new Error("No alternative matched in CHOICE node"); } }
@@ -471,7 +481,12 @@ export class Jsx_expression_T extends SyntaticInterior { expression_0_i : Expres
  sequence_expression_1_i : Sequence_expression_T | undefined;
  spread_element_2_i : Spread_element_T | undefined;
  constructor(expression_0 : Expression_T | undefined,sequence_expression_1 : Sequence_expression_T | undefined,spread_element_2 : Spread_element_T | undefined) { super();this.expression_0_i = expression_0;this.sequence_expression_1_i = sequence_expression_1;this.spread_element_2_i = spread_element_2; } evaluate(): string { return `{${(() => { if (this.expression_0_i !== undefined) { return this.expression_0_i.evaluate(); } return ""; })()}}`; } }
-export class Jsx_identifier_T extends SyntaticLeaf {  constructor(value : string) { super(value); } }
+export class Jsx_identifier_T extends SyntaticLeaf {  constructor(value: string) {
+  if (!/^[a-zA-Z_$][a-zA-Z\d_$]*-[a-zA-Z\d_$\-]*$/.test(value)) {
+    throw new Error(`Value '${value}' does not match pattern '[a-zA-Z_$][a-zA-Z\\d_$]*-[a-zA-Z\\d_$\\-]*'`);
+  }
+  super(value);
+} }
 export class Jsx_namespace_name_T extends SyntaticInterior { _jsx_identifier_0_i : _jsx_identifier_T;
  _jsx_identifier_1_i : _jsx_identifier_T;
  constructor(_jsx_identifier_0 : _jsx_identifier_T,_jsx_identifier_1 : _jsx_identifier_T) { super();this._jsx_identifier_0_i = _jsx_identifier_0;this._jsx_identifier_1_i = _jsx_identifier_1; } evaluate(): string { return `${this._jsx_identifier_0_i.evaluate()}:${this._jsx_identifier_1_i.evaluate()}`; } }
@@ -519,8 +534,8 @@ export class New_expression_T extends SyntaticInterior { primary_expression_0_i 
  new_expression_1_i : New_expression_T | undefined;
  arguments_2_i : Arguments_T | undefined;
  constructor(primary_expression_0 : Primary_expression_T | undefined,new_expression_1 : New_expression_T | undefined,arguments_2 : Arguments_T | undefined) { super();this.primary_expression_0_i = primary_expression_0;this.new_expression_1_i = new_expression_1;this.arguments_2_i = arguments_2; } evaluate(): string { return `new${(() => { if (this.primary_expression_0_i !== undefined) { return this.primary_expression_0_i.evaluate(); } if (this.new_expression_1_i !== undefined) { return this.new_expression_1_i.evaluate(); } throw new Error("No alternative matched in CHOICE node"); })()}${(() => { if (this.arguments_2_i !== undefined) { return this.arguments_2_i.evaluate(); } return ""; })()}`; } }
-export class Null_T extends SyntaticLeaf {  constructor(value : string) { super(value); } }
-export class Number_T extends SyntaticLeaf {  constructor(value : string) { super(value); } }
+export class Null_T extends SyntaticLeaf {  constructor() { super("null"); } }
+export class Number_T extends SyntaticLeaf {  constructor() { super(""); } }
 export class Object_T extends SyntaticInterior { pair_0_i : Pair_T | undefined;
  spread_element_1_i : Spread_element_T | undefined;
  method_definition_2_i : Method_definition_T | undefined;
@@ -548,7 +563,7 @@ export class Object_pattern_T extends SyntaticInterior { pair_pattern_0_i : Pair
  identifier_8_i : Identifier_T | undefined;
  _reserved_identifier_9_i : _reserved_identifier_T | undefined;
  constructor(pair_pattern_0 : Pair_pattern_T | undefined,rest_pattern_1 : Rest_pattern_T | undefined,object_assignment_pattern_2 : Object_assignment_pattern_T | undefined,identifier_3 : Identifier_T | undefined,_reserved_identifier_4 : _reserved_identifier_T | undefined,pair_pattern_5 : Pair_pattern_T | undefined,rest_pattern_6 : Rest_pattern_T | undefined,object_assignment_pattern_7 : Object_assignment_pattern_T | undefined,identifier_8 : Identifier_T | undefined,_reserved_identifier_9 : _reserved_identifier_T | undefined) { super();this.pair_pattern_0_i = pair_pattern_0;this.rest_pattern_1_i = rest_pattern_1;this.object_assignment_pattern_2_i = object_assignment_pattern_2;this.identifier_3_i = identifier_3;this._reserved_identifier_4_i = _reserved_identifier_4;this.pair_pattern_5_i = pair_pattern_5;this.rest_pattern_6_i = rest_pattern_6;this.object_assignment_pattern_7_i = object_assignment_pattern_7;this.identifier_8_i = identifier_8;this._reserved_identifier_9_i = _reserved_identifier_9; } evaluate(): string { return `{${(() => { if (this.pair_pattern_0_i !== undefined) { return `${(() => { if (this.pair_pattern_0_i !== undefined) { return this.pair_pattern_0_i.evaluate(); } return ""; })()}${`,${(() => { if (this.pair_pattern_5_i !== undefined) { return this.pair_pattern_5_i.evaluate(); } return ""; })()}`}`; } return ""; })()}}`; } }
-export class Optional_chain_T extends SyntaticLeaf {  constructor(value : string) { super(value); } }
+export class Optional_chain_T extends SyntaticLeaf {  constructor() { super("?."); } }
 export class Pair_T extends SyntaticInterior { _property_name_0_i : _property_name_T;
  expression_1_i : Expression_T;
  constructor(_property_name_0 : _property_name_T,expression_1 : Expression_T) { super();this._property_name_0_i = _property_name_0;this.expression_1_i = expression_1; } evaluate(): string { return `${this._property_name_0_i.evaluate()}:${this.expression_1_i.evaluate()}`; } }
@@ -606,14 +621,19 @@ export class Primary_expression_this_T extends Primary_expression_T { this_0_i :
  constructor(this_0 : This_T) { super();this.this_0_i = this_0; } evaluate(): string { return this.this_0_i.evaluate(); } }
 export class Primary_expression_true_T extends Primary_expression_T { true_0_i : True_T;
  constructor(true_0 : True_T) { super();this.true_0_i = true_0; } evaluate(): string { return this.true_0_i.evaluate(); } }
-export class Private_property_identifier_T extends SyntaticLeaf {  constructor(value : string) { super(value); } }
+export class Private_property_identifier_T extends SyntaticLeaf {  constructor() { super(""); } }
 export class Program_T extends SyntaticInterior { hash_bang_line_0_i : Hash_bang_line_T | undefined;
  statement_1_i : Statement_T;
  constructor(hash_bang_line_0 : Hash_bang_line_T | undefined,statement_1 : Statement_T) { super();this.hash_bang_line_0_i = hash_bang_line_0;this.statement_1_i = statement_1; } evaluate(): string { return `${(() => { if (this.hash_bang_line_0_i !== undefined) { return this.hash_bang_line_0_i.evaluate(); } return ""; })()}${this.statement_1_i.evaluate()}`; } }
 export class Regex_T extends SyntaticInterior { regex_flags_0_i : Regex_flags_T | undefined;
  constructor(regex_flags_0 : Regex_flags_T | undefined) { super();this.regex_flags_0_i = regex_flags_0; } evaluate(): string { return `//${(() => { if (this.regex_flags_0_i !== undefined) { return this.regex_flags_0_i.evaluate(); } return ""; })()}`; } }
-export class Regex_flags_T extends SyntaticLeaf {  constructor(value : string) { super(value); } }
-export class Regex_pattern_T extends SyntaticLeaf {  constructor(value : string) { super(value); } }
+export class Regex_flags_T extends SyntaticLeaf {  constructor(value: string) {
+  if (!/^[a-z]+$/.test(value)) {
+    throw new Error(`Value '${value}' does not match pattern '[a-z]+'`);
+  }
+  super(value);
+} }
+export class Regex_pattern_T extends SyntaticLeaf {  constructor() { super(""); } }
 export class Rest_pattern_T extends SyntaticInterior { _lhs_expression_0_i : _lhs_expression_T;
  constructor(_lhs_expression_0 : _lhs_expression_T) { super();this._lhs_expression_0_i = _lhs_expression_0; } evaluate(): string { return `...${this._lhs_expression_0_i.evaluate()}`; } }
 export class Return_statement_T extends SyntaticInterior { _expressions_0_i : _expressions_T | undefined;
@@ -677,7 +697,7 @@ export class Subscript_expression_T extends SyntaticInterior { expression_0_i : 
  optional_chain_2_i : Optional_chain_T | undefined;
  _expressions_3_i : _expressions_T;
  constructor(expression_0 : Expression_T | undefined,primary_expression_1 : Primary_expression_T | undefined,optional_chain_2 : Optional_chain_T | undefined,_expressions_3 : _expressions_T) { super();this.expression_0_i = expression_0;this.primary_expression_1_i = primary_expression_1;this.optional_chain_2_i = optional_chain_2;this._expressions_3_i = _expressions_3; } evaluate(): string { return `${(() => { if (this.expression_0_i !== undefined) { return this.expression_0_i.evaluate(); } if (this.primary_expression_1_i !== undefined) { return this.primary_expression_1_i.evaluate(); } throw new Error("No alternative matched in CHOICE node"); })()}${(() => { if (this.optional_chain_2_i !== undefined) { return this.optional_chain_2_i.evaluate(); } return ""; })()}[${this._expressions_3_i.evaluate()}]`; } }
-export class Super_T extends SyntaticLeaf {  constructor(value : string) { super(value); } }
+export class Super_T extends SyntaticLeaf {  constructor() { super("super"); } }
 export class Switch_body_T extends SyntaticInterior { switch_case_0_i : Switch_case_T | undefined;
  switch_default_1_i : Switch_default_T | undefined;
  constructor(switch_case_0 : Switch_case_T | undefined,switch_default_1 : Switch_default_T | undefined) { super();this.switch_case_0_i = switch_case_0;this.switch_default_1_i = switch_default_1; } evaluate(): string { return `{${(() => { if (this.switch_case_0_i !== undefined) { return this.switch_case_0_i.evaluate(); } if (this.switch_default_1_i !== undefined) { return this.switch_default_1_i.evaluate(); } throw new Error("No alternative matched in CHOICE node"); })()}}`; } }
@@ -697,22 +717,42 @@ export class Ternary_expression_T extends SyntaticInterior { expression_0_i : Ex
  expression_1_i : Expression_T;
  expression_2_i : Expression_T;
  constructor(expression_0 : Expression_T,expression_1 : Expression_T,expression_2 : Expression_T) { super();this.expression_0_i = expression_0;this.expression_1_i = expression_1;this.expression_2_i = expression_2; } evaluate(): string { return `${this.expression_0_i.evaluate()}${this.expression_1_i.evaluate()}:${this.expression_2_i.evaluate()}`; } }
-export class This_T extends SyntaticLeaf {  constructor(value : string) { super(value); } }
+export class This_T extends SyntaticLeaf {  constructor() { super("this"); } }
 export class Throw_statement_T extends SyntaticInterior { _expressions_0_i : _expressions_T;
  _semicolon_1_i : _semicolon_T;
  constructor(_expressions_0 : _expressions_T,_semicolon_1 : _semicolon_T) { super();this._expressions_0_i = _expressions_0;this._semicolon_1_i = _semicolon_1; } evaluate(): string { return `throw${this._expressions_0_i.evaluate()}${this._semicolon_1_i.evaluate()}`; } }
-export class True_T extends SyntaticLeaf {  constructor(value : string) { super(value); } }
+export class True_T extends SyntaticLeaf {  constructor() { super("true"); } }
 export class Try_statement_T extends SyntaticInterior { statement_block_0_i : Statement_block_T;
  catch_clause_1_i : Catch_clause_T | undefined;
  finally_clause_2_i : Finally_clause_T | undefined;
  constructor(statement_block_0 : Statement_block_T,catch_clause_1 : Catch_clause_T | undefined,finally_clause_2 : Finally_clause_T | undefined) { super();this.statement_block_0_i = statement_block_0;this.catch_clause_1_i = catch_clause_1;this.finally_clause_2_i = finally_clause_2; } evaluate(): string { return `try${this.statement_block_0_i.evaluate()}${(() => { if (this.catch_clause_1_i !== undefined) { return this.catch_clause_1_i.evaluate(); } return ""; })()}${(() => { if (this.finally_clause_2_i !== undefined) { return this.finally_clause_2_i.evaluate(); } return ""; })()}`; } }
 export class Unary_expression_T extends SyntaticInterior { expression_0_i : Expression_T;
  constructor(expression_0 : Expression_T) { super();this.expression_0_i = expression_0; } evaluate(): string { return `${(() => { return "!"; })()}${this.expression_0_i.evaluate()}`; } }
-export class Undefined_T extends SyntaticLeaf {  constructor(value : string) { super(value); } }
-export class Unescaped_double_jsx_string_fragment_T extends SyntaticLeaf {  constructor(value : string) { super(value); } }
-export class Unescaped_double_string_fragment_T extends SyntaticLeaf {  constructor(value : string) { super(value); } }
-export class Unescaped_single_jsx_string_fragment_T extends SyntaticLeaf {  constructor(value : string) { super(value); } }
-export class Unescaped_single_string_fragment_T extends SyntaticLeaf {  constructor(value : string) { super(value); } }
+export class Undefined_T extends SyntaticLeaf {  constructor() { super("undefined"); } }
+export class Unescaped_double_jsx_string_fragment_T extends SyntaticLeaf {  constructor(value: string) {
+  if (!/^([^"&]|&[^#A-Za-z])+$/.test(value)) {
+    throw new Error(`Value '${value}' does not match pattern '([^\"&]|&[^#A-Za-z])+'`);
+  }
+  super(value);
+} }
+export class Unescaped_double_string_fragment_T extends SyntaticLeaf {  constructor(value: string) {
+  if (!/^[^"\\\r\n]+$/.test(value)) {
+    throw new Error(`Value '${value}' does not match pattern '[^\"\\\\\\r\\n]+'`);
+  }
+  super(value);
+} }
+export class Unescaped_single_jsx_string_fragment_T extends SyntaticLeaf {  constructor(value: string) {
+  if (!/^([^'&]|&[^#A-Za-z])+$/.test(value)) {
+    throw new Error(`Value '${value}' does not match pattern '([^'&]|&[^#A-Za-z])+'`);
+  }
+  super(value);
+} }
+export class Unescaped_single_string_fragment_T extends SyntaticLeaf {  constructor(value: string) {
+  if (!/^[^'\\\r\n]+$/.test(value)) {
+    throw new Error(`Value '${value}' does not match pattern '[^'\\\\\\r\\n]+'`);
+  }
+  super(value);
+} }
 export class Update_expression_T extends SyntaticInterior { expression_0_i : Expression_T | undefined;
  expression_1_i : Expression_T | undefined;
  constructor(expression_0 : Expression_T | undefined,expression_1 : Expression_T | undefined) { super();this.expression_0_i = expression_0;this.expression_1_i = expression_1; } evaluate(): string { if (this.expression_0_i !== undefined) { return `${this.expression_0_i.evaluate()}${(() => { return "++"; })()}`; } if (this.expression_1_i !== undefined) { return `${(() => { return "++"; })()}${this.expression_1_i.evaluate()}`; } throw new Error("No alternative matched in CHOICE node"); } }

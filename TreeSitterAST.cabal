@@ -141,6 +141,10 @@ test-suite TreeSitterAST-test
                    StringEscapingTest,
                    ProgBuilder.ECMA.ProgBuilderForECMASpec,
                    ProgBuilder.ECMA.SentenceGenerationSpec,
+                   Utilities.TemplateEvalIterator,
+                   Utilities.TemplateEvalIteratorSpec,
+                   Utilities.TemplateEvalIterator,
+                   Utilities.TemplateEvalIteratorSpec,
 
     -- LANGUAGE extensions used by modules in this package.
     -- other-extensions:
