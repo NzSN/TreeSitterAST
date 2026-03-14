@@ -12,4 +12,8 @@ $PCS := [[N]]$
 
 ## Operations on PCS
 ### Cover : Gr -> PCS
+The Cover operation is defined as 'Cover : Gr -> PCS', that transform to PCS from a given Gr, 
+the PCS contain all states of GrammarNodes of Gr.
 
+Invariants of Cover
+: 
